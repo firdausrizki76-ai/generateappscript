@@ -183,7 +183,7 @@ Tugas Anda:
         },
       };
 
-      const res = await fetch(geminiUrl, {
+      const res = await fetchGeminiWithRetry(geminiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -232,4 +232,47 @@ Tugas Anda:
       { status: 500 }
     );
   }
+}
+
+// Helper function to fetch Gemini API with exponential backoff retry for transient errors (503, 429, etc.)
+async function fetchGeminiWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  delayMs = 1500
+): Promise<Response> {
+  let lastError: Error | null = null;
+  let currentDelay = delayMs;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+
+      if (res.ok) {
+        return res;
+      }
+
+      // Retry on rate limit (429) or temporary server issues (502, 503, 504)
+      if ([429, 502, 503, 504].includes(res.status)) {
+        console.warn(`Gemini API returned status ${res.status}. Attempt ${attempt}/${maxRetries}. Retrying in ${currentDelay}ms...`);
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, currentDelay));
+          currentDelay *= 2; // exponential backoff
+          continue;
+        }
+      }
+
+      return res; // Return other errors immediately (e.g., 400 Bad Request, 401 Unauthorized)
+    } catch (err: any) {
+      lastError = err;
+      console.error(`Fetch attempt ${attempt} failed with error:`, err);
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, currentDelay));
+        currentDelay *= 2;
+        continue;
+      }
+    }
+  }
+
+  throw lastError || new Error("Failed to connect to Gemini API after multiple retries");
 }
