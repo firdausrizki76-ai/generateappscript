@@ -189,6 +189,10 @@ Format:
         messages: formattedMessages,
         temperature: 0.3,
         max_tokens: 16384,
+        response_format: { type: "json_object" },
+        provider: {
+          require_parameters: true,
+        },
       };
 
       const res = await fetchOpenRouterWithRetry(openRouterUrl, {
