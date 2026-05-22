@@ -694,7 +694,7 @@ export default function ResultPage() {
                       <span className="h-1.5 w-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:0.2s]" />
                       <span className="h-1.5 w-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:0.4s]" />
                     </div>
-                    Sedang menulis ulang kode...
+                    AI sedang berpikir...
                   </div>
                 </div>
               )}

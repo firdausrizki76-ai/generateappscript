@@ -154,7 +154,8 @@ Tugas Anda:
   "explanation": "Penjelasan detail mengenai perubahan apa saja yang telah dilakukan dalam bahasa Indonesia",
   "codeGs": "Isi lengkap file code.gs terbaru (kode utuh)",
   "codeHtml": "Isi lengkap file index.html terbaru (kode utuh)"
-}`;
+}
+5. PENTING UNTUK EFISIENSI & KECEPATAN: Jika permintaan pengguna hanyalah pertanyaan umum, penjelasan kode, obrolan santai, atau tidak memerlukan perubahan kode sama sekali, Anda HARUS mengembalikan string kosong ("") pada kolom "codeGs" dan/atau "codeHtml". Hanya isi kode lengkap jika ada perubahan/modifikasi nyata pada file tersebut. Jika salah satu file tidak berubah, isi file yang tidak berubah tersebut dengan string kosong ("").`;
 
       const contents = messages.map((m: any) => ({
         role: m.role === "assistant" ? "model" : "user",
@@ -206,8 +207,8 @@ Tugas Anda:
       responseData = {
         success: true,
         explanation: parsedResponse.explanation,
-        codeGs: parsedResponse.codeGs,
-        codeHtml: parsedResponse.codeHtml,
+        codeGs: parsedResponse.codeGs || codeGs || "",
+        codeHtml: parsedResponse.codeHtml || codeHtml || "",
       };
     }
 
