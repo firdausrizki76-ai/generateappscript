@@ -105,8 +105,6 @@ export async function POST(req: Request) {
     }
 
     // 6. Process the request (either real OpenRouter or Demo Mock)
-    const body = await req.json();
-    const { codeGs, codeHtml, messages, appName, appDescription } = body;
     const apiKey = process.env.OPENROUTER_API_KEY;
 
     let responseData: {
@@ -376,12 +374,14 @@ async function fetchOpenRouterWithRetry(
 
 function isCasualGreeting(text: string): boolean {
   const clean = text.trim().toLowerCase().replace(/[^a-z\s]/g, "");
+  if (!clean) return false;
+
   const greetings = [
     "hi", "hello", "halo", "hei", "hey", "p", "test", "tes", "ping", "pinging",
     "pagi", "siang", "sore", "malam", "assalamualaikum", "selamat pagi", 
     "selamat siang", "selamat sore", "selamat malam", "apa kabar", "apakabar", 
     "oi", "bro", "sis", "halo asisten", "halo ai", "hello ai", "hello assistant",
-    "hey ai", "hey assistant"
+    "hey ai", "hey assistant", "yo", "he"
   ];
-  return greetings.includes(clean) || clean.length <= 2;
+  return greetings.includes(clean);
 }

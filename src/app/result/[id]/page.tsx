@@ -260,9 +260,18 @@ export default function ResultPage() {
       const result = await res.json();
       if (!result.success) throw new Error(result.error || "Terjadi kegagalan komunikasi.");
 
-      // Sync edited files with AI output
-      setEditedGs(result.codeGs);
-      setEditedHtml(result.codeHtml);
+      // Sync edited files with AI output (only if the AI returned code, otherwise preserve existing local code)
+      let nextGs = editedGs;
+      let nextHtml = editedHtml;
+
+      if (result.codeGs && result.codeGs.trim() !== "") {
+        setEditedGs(result.codeGs);
+        nextGs = result.codeGs;
+      }
+      if (result.codeHtml && result.codeHtml.trim() !== "") {
+        setEditedHtml(result.codeHtml);
+        nextHtml = result.codeHtml;
+      }
       setIsSaved(true);
 
       const assistantMsg = {
@@ -278,7 +287,7 @@ export default function ResultPage() {
       setProfile(updatedProf);
 
       // Save database record
-      saveWorkspaceToHistory(result.codeGs, result.codeHtml, finalMessages);
+      saveWorkspaceToHistory(nextGs, nextHtml, finalMessages);
     } catch (err: any) {
       const errorMsg = {
         role: "assistant" as const,
