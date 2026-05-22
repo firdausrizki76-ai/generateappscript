@@ -299,38 +299,57 @@ Format:
   }
 }
 
-// Helper function to fetch OpenRouter API with exponential backoff retry for transient errors (503, 429, etc.)
+// Helper function to fetch OpenRouter API with timeout and retry logic
 async function fetchOpenRouterWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 3,
-  delayMs = 1500
+  maxRetries = 1, // Kurangi retry agar tidak memicu Vercel timeout
+  delayMs = 1000
 ): Promise<Response> {
   let lastError: Error | null = null;
   let currentDelay = delayMs;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(url, options);
+      // Set strict 45 second timeout for the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
 
       if (res.ok) {
         return res;
       }
 
-      // Retry on rate limit (429) or temporary server issues (502, 503, 504)
-      if ([429, 502, 503, 504].includes(res.status)) {
-        console.warn(`OpenRouter API returned status ${res.status}. Attempt ${attempt}/${maxRetries}. Retrying in ${currentDelay}ms...`);
+      // If it's a 429 Rate Limit from OpenRouter, it usually means upstream is overwhelmed.
+      // Don't retry immediately, fail fast so user gets a clean error message.
+      if (res.status === 429) {
+        const errData = await res.json().catch(() => ({}));
+        const rawMsg = errData?.error?.metadata?.raw || errData?.error?.message || "Terlalu banyak permintaan.";
+        throw new Error(`Model AI sedang penuh/sibuk (Rate Limited). Pesan dari OpenRouter: ${rawMsg}`);
+      }
+
+      if ([502, 503, 504].includes(res.status)) {
+        console.warn(`OpenRouter API status ${res.status}. Attempt ${attempt}/${maxRetries}.`);
         if (attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, currentDelay));
-          currentDelay *= 2; // exponential backoff
+          currentDelay *= 2;
           continue;
         }
       }
 
-      return res; // Return other errors immediately (e.g., 400 Bad Request, 401/403)
+      return res; 
     } catch (err: any) {
       lastError = err;
-      console.error(`Fetch attempt ${attempt} failed with error:`, err);
+      if (err.name === 'AbortError') {
+        throw new Error("Waktu tunggu API AI habis (Timeout 45 detik). Model AI DeepSeek mungkin sedang sangat lambat atau sibuk.");
+      }
+      console.error(`Fetch attempt ${attempt} failed:`, err);
       if (attempt < maxRetries) {
         await new Promise((resolve) => setTimeout(resolve, currentDelay));
         currentDelay *= 2;
@@ -339,7 +358,7 @@ async function fetchOpenRouterWithRetry(
     }
   }
 
-  throw lastError || new Error("Failed to connect to OpenRouter API after multiple retries");
+  throw lastError || new Error("Gagal terhubung ke OpenRouter API.");
 }
 
 function isCasualGreeting(text: string): boolean {
