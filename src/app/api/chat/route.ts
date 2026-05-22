@@ -171,12 +171,6 @@ Tugas Anda:
       const payload = {
         model: modelName,
         messages: formattedMessages,
-        response_format: {
-          type: "json_object",
-        },
-        provider: {
-          ignore: ["DeepInfra"],
-        },
       };
 
       const res = await fetchOpenRouterWithRetry(openRouterUrl, {
@@ -202,7 +196,16 @@ Tugas Anda:
         throw new Error("Respon AI kosong dari OpenRouter API.");
       }
 
-      const parsedResponse = JSON.parse(rawText);
+      // Clean up markdown block wrapping if present (e.g. ```json ... ```)
+      let cleanText = rawText.trim();
+      if (cleanText.startsWith("```")) {
+        cleanText = cleanText
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/, "")
+          .replace(/\s*```$/, "");
+      }
+
+      const parsedResponse = JSON.parse(cleanText);
 
       responseData = {
         success: true,
