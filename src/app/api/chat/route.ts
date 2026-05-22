@@ -217,18 +217,45 @@ Tugas Anda:
 
       // Clean up markdown block wrapping if present (e.g. ```json ... ```)
       let cleanText = rawText.trim();
-      if (cleanText.startsWith("```")) {
-        cleanText = cleanText
-          .replace(/^```json\s*/i, "")
-          .replace(/^```\s*/, "")
-          .replace(/\s*```$/, "");
+      
+      // A function to try parsing JSON or extracting it via regex
+      let parsedResponse: { explanation: string; codeGs: string; codeHtml: string } | null = null;
+      
+      try {
+        // Try direct parse first
+        parsedResponse = JSON.parse(cleanText);
+      } catch (e) {
+        // Try cleaning standard markdown code blocks first
+        if (cleanText.includes("```")) {
+          // Attempt to strip out the code block and parse what's inside
+          const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
+          const match = cleanText.match(codeBlockRegex);
+          if (match && match[1]) {
+            try {
+              parsedResponse = JSON.parse(match[1].trim());
+            } catch (innerError) {
+              console.warn("Failed to parse JSON inside markdown block:", innerError);
+            }
+          }
+        }
+        
+        // If still failed, search for the first '{' and last '}' to extract raw JSON structure
+        if (!parsedResponse) {
+          const firstBrace = cleanText.indexOf("{");
+          const lastBrace = cleanText.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            const potentialJson = cleanText.substring(firstBrace, lastBrace + 1);
+            try {
+              parsedResponse = JSON.parse(potentialJson.trim());
+            } catch (braceError) {
+              console.warn("Failed to parse JSON extracted from braces:", braceError);
+            }
+          }
+        }
       }
 
-      let parsedResponse: { explanation: string; codeGs: string; codeHtml: string };
-      try {
-        parsedResponse = JSON.parse(cleanText);
-      } catch (parseError) {
-        console.warn("Failed to parse AI response as JSON, falling back to treating as plain text explanation:", parseError);
+      if (!parsedResponse) {
+        console.warn("Failed all JSON parsing strategies for AI response, using fallback.");
         parsedResponse = {
           explanation: rawText,
           codeGs: "",
