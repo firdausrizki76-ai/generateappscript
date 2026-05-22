@@ -6,7 +6,7 @@ import { getUserQuotaCycle } from "@/lib/quota";
 const PLAN_LIMITS: Record<string, number> = { free: 1, pro: 10, business: 30 };
 const CHAT_LIMITS: Record<string, number> = { free: 0, pro: 50, business: 150 };
 
-export const maxDuration = 60; // Set Vercel execution timeout to 60 seconds
+export const runtime = 'edge'; // Use Edge runtime to bypass 10s Node.js timeout
 
 export async function POST(req: Request) {
   try {
@@ -311,9 +311,9 @@ async function fetchOpenRouterWithRetry(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Set strict 45 second timeout for the fetch request
+      // Set strict 24 second timeout to beat Vercel's 25s Edge limit
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      const timeoutId = setTimeout(() => controller.abort(), 24000);
       
       const res = await fetch(url, {
         ...options,
@@ -347,7 +347,7 @@ async function fetchOpenRouterWithRetry(
     } catch (err: any) {
       lastError = err;
       if (err.name === 'AbortError') {
-        throw new Error("Waktu tunggu API AI habis (Timeout 45 detik). Model AI DeepSeek mungkin sedang sangat lambat atau sibuk.");
+        throw new Error("Waktu tunggu API AI habis (Timeout 24 detik). Model AI DeepSeek mungkin sedang sangat lambat atau sibuk.");
       }
       console.error(`Fetch attempt ${attempt} failed:`, err);
       if (attempt < maxRetries) {
