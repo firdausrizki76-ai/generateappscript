@@ -140,38 +140,35 @@ export async function POST(req: Request) {
       let systemPrompt = "";
 
       if (isGreeting) {
-        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script.
-Sapa pengguna dengan ramah dalam bahasa Indonesia dan tanyakan bantuan apa yang mereka butuhkan terkait Google Apps Script atau pembuatan HTML/CSS.
-JANGAN membuat atau mengubah kode apa pun. Anda harus mengembalikan respons berformat JSON yang valid dengan skema berikut:
-{
-  "explanation": "Balasan sapaan ramah Anda kepada pengguna",
-  "codeGs": "",
-  "codeHtml": ""
-}`;
+        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script. Sapa pengguna dengan ramah dalam bahasa Indonesia.
+
+ATURAN MUTLAK:
+- Respons Anda HANYA berupa satu objek JSON valid, TANPA teks lain di luar JSON.
+- JANGAN tambahkan kata pengantar, kalimat pembuka, atau markdown code block.
+- Langsung mulai dengan karakter { dan akhiri dengan }.
+
+Format respons:
+{"explanation": "sapaan ramah Anda", "codeGs": "", "codeHtml": ""}`;
       } else {
-        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script. 
-Tugas Anda adalah memperbarui atau memodifikasi file backend (code.gs) dan frontend (index.html) aplikasi Google Apps Script berdasarkan permintaan pengguna.
-Aplikasi saat ini: "${appName}" - Deskripsi: "${appDescription}"
+        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script.
+Aplikasi: "${appName}" — ${appDescription}
 
-Berikut adalah isi file saat ini:
-=== FILE: code.gs ===
-${codeGs}
+${codeGs ? `=== FILE SAAT INI: code.gs ===\n${codeGs}\n` : ""}${codeHtml ? `=== FILE SAAT INI: index.html ===\n${codeHtml}\n` : ""}
+Tugas:
+1. Analisis permintaan pengguna dari riwayat obrolan.
+2. Buat atau perbarui file code.gs dan index.html sesuai permintaan.
+3. KODE HARUS UTUH DAN LENGKAP — jangan memotong, jangan placeholder "// kode lainnya...". Sertakan newline (\n) dan indentasi rapi. JANGAN minified.
+4. Jika hanya pertanyaan umum/obrolan tanpa perubahan kode, isi codeGs dan codeHtml dengan string kosong "".
+5. Jika hanya satu file yang berubah, isi file yang TIDAK berubah dengan string kosong "".
 
-=== FILE: index.html ===
-${codeHtml}
+ATURAN FORMAT MUTLAK (WAJIB DIPATUHI):
+- Respons Anda HANYA berupa satu objek JSON valid.
+- DILARANG KERAS menambahkan teks pengantar, kalimat pembuka/penutup, atau markdown code block (\'\'\'json).
+- Langsung mulai dengan karakter { dan akhiri dengan }.
+- Semua string di dalam JSON harus di-escape dengan benar (gunakan \\n untuk newline, \\" untuk kutip ganda di dalam string).
 
-Tugas Anda:
-1. Analisis permintaan perubahan dari pengguna di riwayat obrolan (messages).
-2. Perbarui file code.gs dan index.html agar memuat fitur yang diminta.
-3. Selalu pertahankan kode asli yang sudah ada yang tidak berhubungan dengan perubahan. Jangan memotong atau menyisakan placeholder seperti "// kode lainnya...". Kembalikan KODE UTUH yang bisa langsung digunakan dengan menyertakan karakter baris baru (newline "\n") dan indentasi yang rapi (JANGAN menggabungkan kode menjadi satu baris tunggal atau format minified).
-4. Anda harus mengembalikan respons berformat JSON yang valid dengan skema berikut:
-{
-  "explanation": "Penjelasan detail mengenai perubahan apa saja yang telah dilakukan dalam bahasa Indonesia",
-  "codeGs": "Isi lengkap file code.gs terbaru (kode utuh)",
-  "codeHtml": "Isi lengkap file index.html terbaru (kode utuh)"
-}
-5. PENTING UNTUK EFISIENSI & KECEPATAN: Jika permintaan pengguna hanyalah pertanyaan umum, penjelasan kode, obrolan santai, atau tidak memerlukan perubahan kode sama sekali, Anda HARUS mengembalikan string kosong ("") pada kolom "codeGs" dan/atau "codeHtml". Hanya isi kode lengkap jika ada perubahan/modifikasi nyata pada file tersebut. Jika salah satu file tidak berubah, isi file yang tidak berubah tersebut dengan string kosong ("").
-6. KEPATUHAN FORMAT: Semua respons Anda HARUS berupa objek JSON dengan format di atas, tanpa teks pengantar atau penutup di luar objek JSON tersebut. Jika pengguna hanya menyapa atau mengobrol biasa, isi field "explanation" dengan balasan Anda dan isi "codeGs" serta "codeHtml" dengan string kosong (""). JANGAN mengembalikan teks biasa tanpa format JSON.`;
+Format:
+{"explanation": "penjelasan dalam bahasa Indonesia", "codeGs": "isi lengkap code.gs atau kosong", "codeHtml": "isi lengkap index.html atau kosong"}`;
       }
 
       const formattedMessages = [
@@ -190,6 +187,8 @@ Tugas Anda:
       const payload = {
         model: modelName,
         messages: formattedMessages,
+        temperature: 0.3,
+        max_tokens: 16384,
       };
 
       const res = await fetchOpenRouterWithRetry(openRouterUrl, {
