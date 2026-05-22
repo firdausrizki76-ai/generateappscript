@@ -148,7 +148,7 @@ ${codeHtml}
 Tugas Anda:
 1. Analisis permintaan perubahan dari pengguna di riwayat obrolan (messages).
 2. Perbarui file code.gs dan index.html agar memuat fitur yang diminta.
-3. Selalu pertahankan kode asli yang sudah ada yang tidak berhubungan dengan perubahan. Jangan memotong atau menyisakan placeholder seperti "// kode lainnya...". Kembalikan KODE UTUH yang bisa langsung digunakan.
+3. Selalu pertahankan kode asli yang sudah ada yang tidak berhubungan dengan perubahan. Jangan memotong atau menyisakan placeholder seperti "// kode lainnya...". Kembalikan KODE UTUH yang bisa langsung digunakan dengan menyertakan karakter baris baru (newline "\n") dan indentasi yang rapi (JANGAN menggabungkan kode menjadi satu baris tunggal atau format minified).
 4. Anda harus mengembalikan respons berformat JSON yang valid dengan skema berikut:
 {
   "explanation": "Penjelasan detail mengenai perubahan apa saja yang telah dilakukan dalam bahasa Indonesia",
