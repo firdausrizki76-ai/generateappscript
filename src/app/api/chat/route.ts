@@ -165,7 +165,7 @@ Tugas Anda:
         })),
       ];
 
-      const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash:free";
+      const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat";
       const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
 
       const payload = {
