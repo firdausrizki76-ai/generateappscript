@@ -155,7 +155,8 @@ Tugas Anda:
   "codeGs": "Isi lengkap file code.gs terbaru (kode utuh)",
   "codeHtml": "Isi lengkap file index.html terbaru (kode utuh)"
 }
-5. PENTING UNTUK EFISIENSI & KECEPATAN: Jika permintaan pengguna hanyalah pertanyaan umum, penjelasan kode, obrolan santai, atau tidak memerlukan perubahan kode sama sekali, Anda HARUS mengembalikan string kosong ("") pada kolom "codeGs" dan/atau "codeHtml". Hanya isi kode lengkap jika ada perubahan/modifikasi nyata pada file tersebut. Jika salah satu file tidak berubah, isi file yang tidak berubah tersebut dengan string kosong ("").`;
+5. PENTING UNTUK EFISIENSI & KECEPATAN: Jika permintaan pengguna hanyalah pertanyaan umum, penjelasan kode, obrolan santai, atau tidak memerlukan perubahan kode sama sekali, Anda HARUS mengembalikan string kosong ("") pada kolom "codeGs" dan/atau "codeHtml". Hanya isi kode lengkap jika ada perubahan/modifikasi nyata pada file tersebut. Jika salah satu file tidak berubah, isi file yang tidak berubah tersebut dengan string kosong ("").
+6. KEPATUHAN FORMAT: Semua respons Anda HARUS berupa objek JSON dengan format di atas, tanpa teks pengantar atau penutup di luar objek JSON tersebut. Jika pengguna hanya menyapa atau mengobrol biasa, isi field "explanation" dengan balasan Anda dan isi "codeGs" serta "codeHtml" dengan string kosong (""). JANGAN mengembalikan teks biasa tanpa format JSON.`;
 
       const formattedMessages = [
         { role: "system", content: systemPrompt },
@@ -205,11 +206,21 @@ Tugas Anda:
           .replace(/\s*```$/, "");
       }
 
-      const parsedResponse = JSON.parse(cleanText);
+      let parsedResponse: { explanation: string; codeGs: string; codeHtml: string };
+      try {
+        parsedResponse = JSON.parse(cleanText);
+      } catch (parseError) {
+        console.warn("Failed to parse AI response as JSON, falling back to treating as plain text explanation:", parseError);
+        parsedResponse = {
+          explanation: rawText,
+          codeGs: "",
+          codeHtml: "",
+        };
+      }
 
       responseData = {
         success: true,
-        explanation: parsedResponse.explanation,
+        explanation: parsedResponse.explanation || rawText || "",
         codeGs: parsedResponse.codeGs || codeGs || "",
         codeHtml: parsedResponse.codeHtml || codeHtml || "",
       };
