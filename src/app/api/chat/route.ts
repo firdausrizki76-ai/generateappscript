@@ -6,6 +6,8 @@ import { getUserQuotaCycle } from "@/lib/quota";
 const PLAN_LIMITS: Record<string, number> = { free: 1, pro: 10, business: 30 };
 const CHAT_LIMITS: Record<string, number> = { free: 0, pro: 50, business: 150 };
 
+export const maxDuration = 60; // Set Vercel execution timeout to 60 seconds
+
 export async function POST(req: Request) {
   try {
     // 1. Get token from Authorization header
