@@ -160,27 +160,19 @@ export default function ResultPage() {
         },
       ];
 
-      // Get current auth session to pass JWT token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
+      const { data: result, error: functionError } = await supabase.functions.invoke("chat", {
+        body: {
           appName: prompt.appName,
           appDescription: prompt.description,
           codeGs: "",
           codeHtml: "",
           messages: initialMessages,
-        }),
+        },
       });
 
-      const result = await res.json();
-      if (!result.success) throw new Error(result.error || "Gagal men-generate kode.");
+      if (functionError || !result || !result.success) {
+        throw new Error(functionError?.message || result?.error || "Gagal men-generate kode.");
+      }
 
       // Update workspace states
       setEditedGs(result.codeGs);
@@ -238,27 +230,19 @@ export default function ResultPage() {
     setChatLoading(true);
 
     try {
-      // Get current auth session to pass JWT token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
+      const { data: result, error: functionError } = await supabase.functions.invoke("chat", {
+        body: {
           appName: prompt.appName,
           appDescription: prompt.description,
           codeGs: editedGs,
           codeHtml: editedHtml,
           messages: nextMessages,
-        }),
+        },
       });
 
-      const result = await res.json();
-      if (!result.success) throw new Error(result.error || "Terjadi kegagalan komunikasi.");
+      if (functionError || !result || !result.success) {
+        throw new Error(functionError?.message || result?.error || "Terjadi kegagalan komunikasi.");
+      }
 
       // Sync edited files with AI output (only if the AI returned code, otherwise preserve existing local code)
       let nextGs = editedGs;
