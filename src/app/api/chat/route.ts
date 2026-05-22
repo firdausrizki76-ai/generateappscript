@@ -176,10 +176,12 @@ Tugas Anda:
 
       const formattedMessages = [
         { role: "system", content: systemPrompt },
-        ...messages.map((m: any) => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.content,
-        })),
+        ...messages
+          .filter((m: any) => m.content && !m.content.trim().startsWith("❌"))
+          .map((m: any) => ({
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.content,
+          })),
       ];
 
       const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat";
