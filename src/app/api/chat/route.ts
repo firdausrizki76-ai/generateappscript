@@ -88,10 +88,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6. Process the request (either real Gemini or Demo Mock)
+    // 6. Process the request (either real OpenRouter or Demo Mock)
     const body = await req.json();
     const { codeGs, codeHtml, messages, appName, appDescription } = body;
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
 
     let responseData: {
       success: boolean;
@@ -115,12 +115,12 @@ export async function POST(req: Request) {
         // First time generation - return templates
         finalCodeGs = getInitialGsCode(appName, appDescription);
         finalCodeHtml = getInitialHtmlCode(appName, appDescription);
-        explanation = `[MODE DEMO - API KEY KOSONG]\n\nKode awal untuk **${appName || "Aplikasi Anda"}** berhasil dibuat!\n\nSaya telah menyusun backend Google Apps Script (\`code.gs\`) dengan fungsi CRUD terhubung ke Google Sheets, serta file frontend (\`index.html\`) menggunakan UI Bootstrap 5 yang modern dan responsif.\n\nUntuk menghubungkan ke AI asli (Gemini API), silakan buat file \`.env.local\` di direktori \`app/\` dan tambahkan:\n\`GEMINI_API_KEY=key_anda_di_sini\``;
+        explanation = `[MODE DEMO - API KEY KOSONG]\n\nKode awal untuk **${appName || "Aplikasi Anda"}** berhasil dibuat!\n\nSaya telah menyusun backend Google Apps Script (\`code.gs\`) dengan fungsi CRUD terhubung ke Google Sheets, serta file frontend (\`index.html\`) menggunakan UI Bootstrap 5 yang modern dan responsif.\n\nUntuk menghubungkan ke AI asli (OpenRouter API), silakan buat file \`.env.local\` di direktori \`app/\` dan tambahkan:\n\`OPENROUTER_API_KEY=key_anda_di_sini\``;
       } else {
         // Subsequent updates - prepend comments to show simulator activity
         finalCodeGs = `// [Update Demo: ${displayUserMsg.replace(/\n/g, " ")}]\n` + (codeGs || "");
         finalCodeHtml = `<!-- [Update Demo: ${displayUserMsg.replace(/\n/g, " ")}] -->\n` + (codeHtml || "");
-        explanation = `[MODE DEMO - API KEY KOSONG]\n\nSaya menerima instruksi Anda: "${displayUserMsg}".\n\nSimulasi: Memperbarui kode di editor dengan menambahkan komentar instruksi di bagian atas file.\n\nSilakan isi \`GEMINI_API_KEY\` di \`.env.local\` untuk pemrosesan AI secara penuh!`;
+        explanation = `[MODE DEMO - API KEY KOSONG]\n\nSaya menerima instruksi Anda: "${displayUserMsg}".\n\nSimulasi: Memperbarui kode di editor dengan menambahkan komentar instruksi di bagian atas file.\n\nSilakan isi \`OPENROUTER_API_KEY\` di \`.env.local\` untuk pemrosesan AI secara penuh!`;
       }
 
       // Artificial Delay
@@ -133,7 +133,7 @@ export async function POST(req: Request) {
         codeHtml: finalCodeHtml,
       };
     } else {
-      // Call real Gemini API
+      // Call real OpenRouter API
       const systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script. 
 Tugas Anda adalah memperbarui atau memodifikasi file backend (code.gs) dan frontend (index.html) aplikasi Google Apps Script berdasarkan permintaan pengguna.
 Aplikasi saat ini: "${appName}" - Deskripsi: "${appDescription}"
@@ -157,49 +157,46 @@ Tugas Anda:
 }
 5. PENTING UNTUK EFISIENSI & KECEPATAN: Jika permintaan pengguna hanyalah pertanyaan umum, penjelasan kode, obrolan santai, atau tidak memerlukan perubahan kode sama sekali, Anda HARUS mengembalikan string kosong ("") pada kolom "codeGs" dan/atau "codeHtml". Hanya isi kode lengkap jika ada perubahan/modifikasi nyata pada file tersebut. Jika salah satu file tidak berubah, isi file yang tidak berubah tersebut dengan string kosong ("").`;
 
-      const contents = messages.map((m: any) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      }));
+      const formattedMessages = [
+        { role: "system", content: systemPrompt },
+        ...messages.map((m: any) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        })),
+      ];
 
-      const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash:free";
+      const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
 
       const payload = {
-        contents,
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              explanation: { type: "STRING" },
-              codeGs: { type: "STRING" },
-              codeHtml: { type: "STRING" },
-            },
-            required: ["explanation", "codeGs", "codeHtml"],
-          },
+        model: modelName,
+        messages: formattedMessages,
+        response_format: {
+          type: "json_object",
         },
       };
 
-      const res = await fetchGeminiWithRetry(geminiUrl, {
+      const res = await fetchOpenRouterWithRetry(openRouterUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+          "HTTP-Referer": "https://generateappscript.vercel.app/",
+          "X-Title": "AppScript Generator",
+        },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Gemini API Error (${res.status}): ${errText}`);
+        throw new Error(`OpenRouter API Error (${res.status}): ${errText}`);
       }
 
       const data = await res.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const rawText = data.choices?.[0]?.message?.content;
 
       if (!rawText) {
-        throw new Error("Respon AI kosong dari Gemini API.");
+        throw new Error("Respon AI kosong dari OpenRouter API.");
       }
 
       const parsedResponse = JSON.parse(rawText);
@@ -235,8 +232,8 @@ Tugas Anda:
   }
 }
 
-// Helper function to fetch Gemini API with exponential backoff retry for transient errors (503, 429, etc.)
-async function fetchGeminiWithRetry(
+// Helper function to fetch OpenRouter API with exponential backoff retry for transient errors (503, 429, etc.)
+async function fetchOpenRouterWithRetry(
   url: string,
   options: RequestInit,
   maxRetries = 3,
@@ -255,7 +252,7 @@ async function fetchGeminiWithRetry(
 
       // Retry on rate limit (429) or temporary server issues (502, 503, 504)
       if ([429, 502, 503, 504].includes(res.status)) {
-        console.warn(`Gemini API returned status ${res.status}. Attempt ${attempt}/${maxRetries}. Retrying in ${currentDelay}ms...`);
+        console.warn(`OpenRouter API returned status ${res.status}. Attempt ${attempt}/${maxRetries}. Retrying in ${currentDelay}ms...`);
         if (attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, currentDelay));
           currentDelay *= 2; // exponential backoff
@@ -263,7 +260,7 @@ async function fetchGeminiWithRetry(
         }
       }
 
-      return res; // Return other errors immediately (e.g., 400 Bad Request, 401 Unauthorized)
+      return res; // Return other errors immediately (e.g., 400 Bad Request, 401/403)
     } catch (err: any) {
       lastError = err;
       console.error(`Fetch attempt ${attempt} failed with error:`, err);
@@ -275,5 +272,5 @@ async function fetchGeminiWithRetry(
     }
   }
 
-  throw lastError || new Error("Failed to connect to Gemini API after multiple retries");
+  throw lastError || new Error("Failed to connect to OpenRouter API after multiple retries");
 }
