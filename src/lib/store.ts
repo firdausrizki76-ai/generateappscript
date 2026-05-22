@@ -13,6 +13,7 @@ export interface UserProfile {
   quotaLimit: number;
   chatQuotaUsed: number;
   chatQuotaLimit: number;
+  resetDate?: string;
 }
 
 export interface PromptHistory {
@@ -139,7 +140,7 @@ export async function getProfile(): Promise<UserProfile> {
 
     if (!profile) return fallbackProfile;
 
-    const { cycleId, limit: quotaLimit, chatLimit: chatQuotaLimit } = await getUserQuotaCycle(supabase, user.id, profile);
+    const { cycleId, limit: quotaLimit, chatLimit: chatQuotaLimit, resetDate } = await getUserQuotaCycle(supabase, user.id, profile);
     let { data: quota, error: quotaError } = await supabase
       .from("quota_usage")
       .select("*")
@@ -172,6 +173,7 @@ export async function getProfile(): Promise<UserProfile> {
       quotaLimit: quota?.limit ?? 1,
       chatQuotaUsed: quota?.chat_used ?? 0,
       chatQuotaLimit: quota?.chat_limit ?? 0,
+      resetDate,
     };
   } catch (err) {
     console.error("Error getting profile:", err);

@@ -5,13 +5,14 @@ export interface QuotaCycleInfo {
   plan: "free" | "pro" | "business";
   limit: number;
   chatLimit: number;
+  resetDate: string;
 }
 
 export const PLAN_LIMITS: Record<string, number> = { free: 1, pro: 10, business: 30 };
 export const CHAT_LIMITS: Record<string, number> = { free: 0, pro: 50, business: 150 };
 
 /**
- * Calculates the current quota billing cycle ID and limits for a user.
+ * Calculates the current quota billing cycle ID, limits, and reset date for a user.
  * 
  * - For Free tier: resets every 30 days starting from profiles.created_at.
  *   cycleId: `free-YYYY-MM-DD` (where YYYY-MM-DD is the start date of the current 30-day window)
@@ -46,12 +47,15 @@ export async function getUserQuotaCycle(
     const cycleNumber = Math.max(0, Math.floor(daysDiff / 30));
     const cycleStartDate = new Date(createdAt.getTime() + cycleNumber * 30 * 24 * 60 * 60 * 1000);
     const cycleStartDateStr = cycleStartDate.toISOString().substring(0, 10);
+    const cycleResetDate = new Date(cycleStartDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const resetDate = cycleResetDate.toISOString().substring(0, 10);
 
     return {
       cycleId: `free-${cycleStartDateStr}`,
       plan,
       limit,
       chatLimit,
+      resetDate,
     };
   } else {
     // Pro or Business: search for active subscription
@@ -65,11 +69,14 @@ export async function getUserQuotaCycle(
       .limit(1);
 
     if (activeSubs && activeSubs.length > 0) {
+      const expiresAt = new Date(activeSubs[0].expires_at);
+      const resetDate = expiresAt.toISOString().substring(0, 10);
       return {
         cycleId: `sub-${activeSubs[0].id}`,
         plan,
         limit,
         chatLimit,
+        resetDate,
       };
     }
 
@@ -81,12 +88,15 @@ export async function getUserQuotaCycle(
     const cycleNumber = Math.max(0, Math.floor(daysDiff / 30));
     const cycleStartDate = new Date(createdAt.getTime() + cycleNumber * 30 * 24 * 60 * 60 * 1000);
     const cycleStartDateStr = cycleStartDate.toISOString().substring(0, 10);
+    const cycleResetDate = new Date(cycleStartDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const resetDate = cycleResetDate.toISOString().substring(0, 10);
 
     return {
       cycleId: `${plan}-${cycleStartDateStr}`,
       plan,
       limit,
       chatLimit,
+      resetDate,
     };
   }
 }

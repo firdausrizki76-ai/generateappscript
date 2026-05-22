@@ -69,6 +69,22 @@ const plans = [
   },
 ];
 
+const formatResetDate = (dateStr?: string) => {
+  if (!dateStr) return "Tanggal 1";
+  try {
+    const date = new Date(dateStr);
+    const day = date.getDate();
+    const months = [
+      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+    const monthName = months[date.getMonth()];
+    return `Tanggal ${day} ${monthName}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 export default function AccountPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -289,8 +305,12 @@ export default function AccountPage() {
                 <Calendar className="h-4 w-4 text-brand-400" />
                 <span className="text-xs text-surface-400">Reset Kuota</span>
               </div>
-              <span className="text-lg font-bold text-white">Tanggal 1</span>
-              <p className="text-xs text-surface-500">Setiap bulan</p>
+              <span className="text-lg font-bold text-white">
+                {profile?.resetDate ? formatResetDate(profile.resetDate) : "Tanggal 1"}
+              </span>
+              <p className="text-xs text-surface-500">
+                {profile?.plan === "free" ? "Setiap 30 hari" : "Siklus langganan"}
+              </p>
             </div>
             <div className="glass-light rounded-xl p-4">
               <div className="flex items-center gap-2 mb-1">
