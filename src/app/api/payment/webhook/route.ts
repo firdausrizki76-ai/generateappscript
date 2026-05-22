@@ -110,8 +110,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Gagal memperbarui profil pengguna." }, { status: 500 });
       }
 
-      // C. Reset/Insert quota limit for the current month
-      const currentMonth = now.toISOString().substring(0, 7);
+      // C. Reset/Insert quota limit for the subscription cycle
+      const cycleId = `sub-${subscription.id}`;
       const PLAN_LIMITS: Record<string, number> = { pro: 10, business: 30 };
       const CHAT_LIMITS: Record<string, number> = { pro: 50, business: 150 };
       const userPlan = subscription.plan;
@@ -121,7 +121,7 @@ export async function POST(req: Request) {
         .upsert(
           {
             user_id: subscription.user_id,
-            month: currentMonth,
+            month: cycleId,
             limit: PLAN_LIMITS[userPlan] || 1,
             chat_limit: CHAT_LIMITS[userPlan] || 0,
             used: 0,

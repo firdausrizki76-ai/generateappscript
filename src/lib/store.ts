@@ -3,6 +3,7 @@
    ───────────────────────────────────────────── */
 
 import { supabase } from "./supabase";
+import { getUserQuotaCycle } from "./quota";
 
 export interface UserProfile {
   name: string;
@@ -138,23 +139,21 @@ export async function getProfile(): Promise<UserProfile> {
 
     if (!profile) return fallbackProfile;
 
-    const currentMonth = new Date().toISOString().substring(0, 7);
+    const { cycleId, limit: quotaLimit, chatLimit: chatQuotaLimit } = await getUserQuotaCycle(supabase, user.id, profile);
     let { data: quota, error: quotaError } = await supabase
       .from("quota_usage")
       .select("*")
       .eq("user_id", user.id)
-      .eq("month", currentMonth)
+      .eq("month", cycleId)
       .single();
 
     if (quotaError || !quota) {
-      // Create new quota for new month
-      const quotaLimit = PLAN_LIMITS[profile.plan] || 1;
-      const chatQuotaLimit = CHAT_LIMITS[profile.plan] || 0;
+      // Create new quota for new cycle
       const { data: newQuota } = await supabase
         .from("quota_usage")
         .insert({
           user_id: user.id,
-          month: currentMonth,
+          month: cycleId,
           used: 0,
           limit: quotaLimit,
           chat_used: 0,
@@ -194,7 +193,7 @@ export async function saveProfile(p: UserProfile): Promise<void> {
       })
       .eq("id", user.id);
 
-    const currentMonth = new Date().toISOString().substring(0, 7);
+    const { cycleId } = await getUserQuotaCycle(supabase, user.id);
     await supabase
       .from("quota_usage")
       .update({
@@ -204,7 +203,7 @@ export async function saveProfile(p: UserProfile): Promise<void> {
         chat_used: p.chatQuotaUsed,
       })
       .eq("user_id", user.id)
-      .eq("month", currentMonth);
+      .eq("month", cycleId);
   } catch (err) {
     console.error("Error saving profile:", err);
   }
@@ -221,7 +220,7 @@ export async function upgradePlan(plan: "free" | "pro" | "business"): Promise<vo
       .update({ plan })
       .eq("id", user.id);
 
-    const currentMonth = new Date().toISOString().substring(0, 7);
+    const { cycleId } = await getUserQuotaCycle(supabase, user.id, { plan });
     await supabase
       .from("quota_usage")
       .update({
@@ -231,7 +230,7 @@ export async function upgradePlan(plan: "free" | "pro" | "business"): Promise<vo
         chat_used: 0,
       })
       .eq("user_id", user.id)
-      .eq("month", currentMonth);
+      .eq("month", cycleId);
   } catch (err) {
     console.error("Error upgrading plan:", err);
   }
@@ -294,10 +293,10 @@ export async function addPromptToHistory(item: PromptHistory): Promise<void> {
         status: "done",
       });
 
-    const currentMonth = new Date().toISOString().substring(0, 7);
+    const { cycleId } = await getUserQuotaCycle(supabase, user.id);
     await supabase.rpc("increment_quota", {
       user_id_val: user.id,
-      month_val: currentMonth,
+      month_val: cycleId,
     });
   } catch (err) {
     console.error("Error adding prompt to history:", err);

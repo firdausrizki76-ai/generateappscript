@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getInitialGsCode, getInitialHtmlCode } from "@/lib/templates";
+import { getUserQuotaCycle } from "@/lib/quota";
 
 const PLAN_LIMITS: Record<string, number> = { free: 1, pro: 10, business: 30 };
 const CHAT_LIMITS: Record<string, number> = { free: 0, pro: 50, business: 150 };
@@ -43,32 +44,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const currentMonth = new Date().toISOString().substring(0, 7);
+    const { cycleId, limit: quotaLimit, chatLimit: chatQuotaLimit } = await getUserQuotaCycle(supabaseServer, user.id);
 
     // 4. Fetch or create quota row
     let { data: quota, error: quotaError } = await supabaseServer
       .from("quota_usage")
       .select("*")
-      .eq("month", currentMonth)
+      .eq("month", cycleId)
       .single();
 
     if (quotaError || !quota) {
-      // Get user plan to set correct limits
-      const { data: profile, error: profileError } = await supabaseServer
-        .from("profiles")
-        .select("plan")
-        .eq("id", user.id)
-        .single();
-
-      const userPlan = profile?.plan || "free";
-      const quotaLimit = PLAN_LIMITS[userPlan] || 1;
-      const chatQuotaLimit = CHAT_LIMITS[userPlan] || 0;
-
       const { data: newQuota, error: createQuotaError } = await supabaseServer
         .from("quota_usage")
         .insert({
           user_id: user.id,
-          month: currentMonth,
+          month: cycleId,
           used: 0,
           limit: quotaLimit,
           chat_used: 0,
@@ -78,6 +68,7 @@ export async function POST(req: Request) {
         .single();
 
       if (createQuotaError || !newQuota) {
+        console.error("Failed to create quota row:", createQuotaError);
         return NextResponse.json(
           { success: false, error: "Gagal memproses kuota pengguna." },
           { status: 500 }
@@ -222,7 +213,7 @@ Tugas Anda:
     // 7. Increment chat quota in database (using security definer function RPC)
     const { error: rpcError } = await supabaseServer.rpc("increment_chat_quota", {
       user_id_val: user.id,
-      month_val: currentMonth,
+      month_val: cycleId,
     });
 
     if (rpcError) {
