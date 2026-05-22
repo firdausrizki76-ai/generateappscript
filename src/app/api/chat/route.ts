@@ -46,6 +46,20 @@ export async function POST(req: Request) {
       );
     }
 
+    const body = await req.json();
+    const { codeGs, codeHtml, messages, appName, appDescription } = body;
+    const lastUserMsg = messages[messages.length - 1]?.content || "";
+
+    // 6. Check for casual greetings (bypass AI completely to save tokens & time)
+    if (isCasualGreeting(lastUserMsg)) {
+      return NextResponse.json({
+        success: true,
+        explanation: "Halo! Ada yang bisa saya bantu untuk aplikasi AppScript Anda?",
+        codeGs: codeGs || "",
+        codeHtml: codeHtml || "",
+      });
+    }
+
     const { cycleId, limit: quotaLimit, chatLimit: chatQuotaLimit } = await getUserQuotaCycle(supabaseServer, user.id);
 
     // 4. Fetch or create quota row
@@ -152,25 +166,24 @@ ATURAN MUTLAK:
 Format respons:
 {"explanation": "sapaan ramah Anda", "codeGs": "", "codeHtml": ""}`;
       } else {
-        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script.
-Aplikasi: "${appName}" — ${appDescription}
+        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script dan asisten AI umum yang cerdas.
+Aplikasi saat ini: "${appName}" — ${appDescription}
 
 ${codeGs ? `=== FILE SAAT INI: code.gs ===\n${codeGs}\n` : ""}${codeHtml ? `=== FILE SAAT INI: index.html ===\n${codeHtml}\n` : ""}
-Tugas:
-1. Analisis permintaan pengguna dari riwayat obrolan.
-2. Buat atau perbarui file code.gs dan index.html sesuai permintaan.
-3. KODE HARUS UTUH DAN LENGKAP — jangan memotong, jangan placeholder "// kode lainnya...". Sertakan newline (\n) dan indentasi rapi. JANGAN minified.
+Tugas & Peran Anda:
+1. Jika pengguna bertanya hal seputar coding/aplikasi, berikan analisis dan perbarui file codeGs dan codeHtml.
+2. JIKA PENGGUNA BERTANYA HAL UMUM/RANDOM (seperti matematika, sapaan, atau pengetahuan umum), JAWAB DENGAN BENAR dan natural di kolom "explanation". Anda adalah AI yang pintar, jawab pertanyaan 1+1 atau apapun dengan tepat.
+3. KODE HARUS UTUH DAN LENGKAP jika ada perubahan.
 4. Jika hanya pertanyaan umum/obrolan tanpa perubahan kode, isi codeGs dan codeHtml dengan string kosong "".
 5. Jika hanya satu file yang berubah, isi file yang TIDAK berubah dengan string kosong "".
 
 ATURAN FORMAT MUTLAK (WAJIB DIPATUHI):
 - Respons Anda HANYA berupa satu objek JSON valid.
-- DILARANG KERAS menambahkan teks pengantar, kalimat pembuka/penutup, atau markdown code block (\'\'\'json).
+- DILARANG KERAS menambahkan teks pengantar, kalimat pembuka/penutup, atau markdown code block (\`\`\`json).
 - Langsung mulai dengan karakter { dan akhiri dengan }.
-- Semua string di dalam JSON harus di-escape dengan benar (gunakan \\n untuk newline, \\" untuk kutip ganda di dalam string).
 
 Format:
-{"explanation": "penjelasan dalam bahasa Indonesia", "codeGs": "isi lengkap code.gs atau kosong", "codeHtml": "isi lengkap index.html atau kosong"}`;
+{"explanation": "jawaban pertanyaan atau penjelasan kode Anda", "codeGs": "isi lengkap code.gs atau kosong", "codeHtml": "isi lengkap index.html atau kosong"}`;
       }
 
       const formattedMessages = [
@@ -270,9 +283,9 @@ Format:
 
       responseData = {
         success: true,
-        explanation: parsedResponse.explanation || rawText || "",
-        codeGs: parsedResponse.codeGs || codeGs || "",
-        codeHtml: parsedResponse.codeHtml || codeHtml || "",
+        explanation: parsedResponse.explanation !== undefined ? parsedResponse.explanation : (rawText || ""),
+        codeGs: parsedResponse.codeGs !== undefined ? parsedResponse.codeGs : (codeGs || ""),
+        codeHtml: parsedResponse.codeHtml !== undefined ? parsedResponse.codeHtml : (codeHtml || ""),
       };
     }
 
