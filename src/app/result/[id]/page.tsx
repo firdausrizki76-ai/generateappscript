@@ -1,0 +1,766 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Copy,
+  Download,
+  Sparkles,
+  Check,
+  ArrowLeft,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  MessageSquare,
+  Send,
+  Terminal,
+  FileCode,
+  Lock,
+  Unlock,
+  Save,
+  FileText,
+  AlertTriangle,
+} from "lucide-react";
+import {
+  getPromptById,
+  getProfile,
+  saveProfile,
+  isLoggedIn,
+  updatePromptCodeAndChat,
+  type PromptHistory,
+  type UserProfile,
+} from "@/lib/store";
+import { supabase } from "@/lib/supabase";
+
+export default function ResultPage() {
+  const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
+  const [prompt, setPrompt] = useState<PromptHistory | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // UI States
+  const [activeTab, setActiveTab] = useState<"plan" | "gs" | "html">("plan");
+  const [copied, setCopied] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+
+  // Editor states (local copies)
+  const [editedGs, setEditedGs] = useState("");
+  const [editedHtml, setEditedHtml] = useState("");
+  const [isSaved, setIsSaved] = useState(true);
+
+  // Chat states
+  const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [firstGenLoading, setFirstGenLoading] = useState(false);
+
+  // Quota modal warning
+  const [showQuotaModal, setShowQuotaModal] = useState(false);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, chatLoading]);
+
+  useEffect(() => {
+    setMounted(true);
+    if (!isLoggedIn()) {
+      router.push("/login");
+      return;
+    }
+    const loadData = async () => {
+      try {
+        const found = await getPromptById(id);
+        if (found) {
+          setPrompt(found);
+          setEditedGs(found.codeGs || "");
+          setEditedHtml(found.codeHtml || "");
+          setChatMessages(found.chatHistory || []);
+          if (found.codeGs) {
+            setActiveTab("gs");
+          }
+        }
+        const prof = await getProfile();
+        setProfile(prof);
+      } catch (err) {
+        console.error("Failed to load prompt workspace:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [id, router]);
+
+  // Save history changes back to database
+  const saveWorkspaceToHistory = async (newGs: string, newHtml: string, newChat: typeof chatMessages) => {
+    if (!id) return;
+    try {
+      await updatePromptCodeAndChat(id, newGs, newHtml, newChat);
+    } catch (err) {
+      console.error("Failed to save workspace to database:", err);
+    }
+  };
+
+  const togglePlanSimulate = async () => {
+    if (!profile) return;
+    const nextPlan = profile.plan === "free" ? "pro" : "free";
+    const nextQuotaLimit = nextPlan === "free" ? 1 : 10;
+    const nextChatLimit = nextPlan === "free" ? 0 : 50;
+
+    const updated: UserProfile = {
+      ...profile,
+      plan: nextPlan,
+      quotaLimit: nextQuotaLimit,
+      chatQuotaLimit: nextChatLimit,
+      chatQuotaUsed: 0,
+    };
+    await saveProfile(updated);
+    setProfile(updated);
+  };
+
+  const handleCopy = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadFile = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Generate code.gs & index.html for the first time
+  const handleGenerateFirstTime = async () => {
+    if (!prompt || !profile) return;
+
+    // Check Chat Quota for Pro Users
+    if (profile.chatQuotaUsed >= profile.chatQuotaLimit) {
+      setShowQuotaModal(true);
+      return;
+    }
+
+    setFirstGenLoading(true);
+    try {
+      const initialMessages: { role: "user" | "assistant"; content: string }[] = [
+        {
+          role: "user",
+          content: `Buatkan kode lengkap code.gs dan index.html berdasarkan plan berikut:\n\n${prompt.outputMd}`,
+        },
+      ];
+
+      // Get current auth session to pass JWT token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          appName: prompt.appName,
+          appDescription: prompt.description,
+          codeGs: "",
+          codeHtml: "",
+          messages: initialMessages,
+        }),
+      });
+
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || "Gagal men-generate kode.");
+
+      // Update workspace states
+      setEditedGs(result.codeGs);
+      setEditedHtml(result.codeHtml);
+      setIsSaved(true);
+
+      const assistantMessage = {
+        role: "assistant" as const,
+        content: result.explanation || "Kode awal berhasil di-generate! Silakan periksa tab code.gs dan index.html di sebelah kiri.",
+      };
+
+      // Tampilkan pesan awal yang bersih (tidak sepanjang markdown aslinya) di UI chat
+      const cleanUserMsg = {
+        role: "user" as const,
+        content: "✨ Generate kode awal dari plan.md",
+      };
+
+      const updatedChat = [...chatMessages, cleanUserMsg, assistantMessage];
+      setChatMessages(updatedChat);
+
+      // Refresh profile quota from DB
+      const updatedProf = await getProfile();
+      setProfile(updatedProf);
+
+      // Save to History
+      saveWorkspaceToHistory(result.codeGs, result.codeHtml, updatedChat);
+      setActiveTab("gs");
+    } catch (err: any) {
+      alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
+    } finally {
+      setFirstGenLoading(false);
+    }
+  };
+
+  const handleManualSave = () => {
+    if (!prompt) return;
+    saveWorkspaceToHistory(editedGs, editedHtml, chatMessages);
+    setIsSaved(true);
+  };
+
+  // Handle Chat message sending
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || chatLoading || !prompt || !profile) return;
+
+    if (profile.chatQuotaUsed >= profile.chatQuotaLimit) {
+      setShowQuotaModal(true);
+      return;
+    }
+
+    const userMsg = { role: "user" as const, content: chatInput };
+    const nextMessages = [...chatMessages, userMsg];
+    setChatMessages(nextMessages);
+    setChatInput("");
+    setChatLoading(true);
+
+    try {
+      // Get current auth session to pass JWT token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          appName: prompt.appName,
+          appDescription: prompt.description,
+          codeGs: editedGs,
+          codeHtml: editedHtml,
+          messages: nextMessages,
+        }),
+      });
+
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || "Terjadi kegagalan komunikasi.");
+
+      // Sync edited files with AI output
+      setEditedGs(result.codeGs);
+      setEditedHtml(result.codeHtml);
+      setIsSaved(true);
+
+      const assistantMsg = {
+        role: "assistant" as const,
+        content: result.explanation,
+      };
+
+      const finalMessages = [...nextMessages, assistantMsg];
+      setChatMessages(finalMessages);
+
+      // Refresh profile quota from DB
+      const updatedProf = await getProfile();
+      setProfile(updatedProf);
+
+      // Save database record
+      saveWorkspaceToHistory(result.codeGs, result.codeHtml, finalMessages);
+    } catch (err: any) {
+      const errorMsg = {
+        role: "assistant" as const,
+        content: `❌ Gagal memproses permintaan: ${err.message || "Gangguan koneksi API."}`,
+      };
+      setChatMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  if (!mounted || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="h-8 w-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!prompt) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <div className="flex justify-center mb-4">
+          <Search className="h-16 w-16 text-surface-600 animate-pulse" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Prompt Tidak Ditemukan</h2>
+        <p className="text-surface-400 mb-6">ID prompt tidak valid atau prompt sudah dihapus.</p>
+        <Link href="/dashboard" className="btn-primary">
+          Kembali ke Dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  const isPro = profile?.plan === "pro" || profile?.plan === "business";
+
+  /* Markdown renderer for plan.md view */
+  const renderMd = (md: string) => {
+    const html = md
+      .replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-white mt-4 mb-2">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-brand-300 mt-6 mb-3 border-b border-surface-800 pb-1">$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-black text-white mb-4">$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code class="bg-surface-900 text-brand-400 px-1 py-0.5 rounded font-mono text-xs border border-surface-800">$1</code>')
+      .replace(/^- \[ \] (.+)$/gm, '<li class="flex items-start gap-2 text-sm text-surface-300 my-1"><input type="checkbox" class="mt-1" disabled /> <span>$1</span></li>')
+      .replace(/^- \[x\] (.+)$/gm, '<li class="flex items-start gap-2 text-sm text-surface-300 my-1"><input type="checkbox" class="mt-1" checked disabled /> <span>$1</span></li>')
+      .replace(/^- (.+)$/gm, '<li class="list-disc ml-5 text-sm text-surface-300 my-1">$1</li>')
+      .replace(/^(\|.+\|)$/gm, (match) => {
+        const cells = match.split("|").filter((c) => c.trim() !== "");
+        if (cells.every((c) => c.trim().match(/^-+$/))) return "";
+        const tag = match.includes("---") ? "th" : "td";
+        const tdStyle = tag === "th" ? "bg-surface-900 font-semibold text-brand-300 p-2 text-left border border-surface-800" : "p-2 border border-surface-800 text-surface-300 text-sm";
+        return `<tr>${cells.map((c) => `<${tag} class="${tdStyle}">${c.trim()}</${tag}>`).join("")}</tr>`;
+      })
+      .replace(/tr class="sep"\/tr/g, "")
+      .replace(/```(\w*)\n([\s\S]*?)```/gm, '<pre class="bg-surface-950 p-4 rounded-xl font-mono text-xs text-brand-300 border border-surface-800 overflow-x-auto my-3">$2</pre>')
+      .replace(/\n\n/g, "</p><p class='my-2'>")
+      .replace(/\n/g, "<br />");
+    return `<p>${html}</p>`;
+  };
+
+  return (
+    <div className="relative min-h-[85vh] py-6">
+      <div className="absolute inset-0 bg-grid pointer-events-none" />
+      <div className="absolute inset-0 bg-radial-top pointer-events-none" />
+
+      <div className="relative mx-auto max-w-[95%] px-2 lg:px-4">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="btn-ghost !py-2 !px-3 shrink-0">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl font-bold text-white font-display">{prompt.appName}</h1>
+                <span className="text-[10px] bg-brand-500/10 border border-brand-500/30 text-brand-300 px-2 py-0.5 rounded-full capitalize">
+                  Paket: {profile?.plan || "free"}
+                </span>
+              </div>
+              <p className="text-xs text-surface-500 font-medium">
+                Selesai dibuat pada {new Date(prompt.createdAt).toLocaleDateString("id-ID", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+
+          {/* Dev Demo Plan Switcher */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={togglePlanSimulate}
+              className={`text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 font-medium transition cursor-pointer ${
+                isPro
+                  ? "bg-brand-500/15 border-brand-500/30 text-brand-300 hover:bg-brand-500/20"
+                  : "bg-surface-800 border-surface-700 text-surface-400 hover:border-surface-600"
+              }`}
+              title="Klik untuk mensimulasikan pergantian paket Free dan Pro secara instan"
+            >
+              {isPro ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+              Mode Demo: {isPro ? "Beralih ke Free" : "Aktifkan Pro (Workspace)"}
+            </button>
+          </div>
+        </div>
+
+        {/* ── WORKSPACE CORE LAYOUT ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 items-stretch">
+          
+          {/* LEFT PANEL: Code Editor / MD Viewer */}
+          <div className="glass rounded-2xl overflow-hidden flex flex-col min-h-[600px] border border-surface-800">
+            {/* Tabs Controller */}
+            <div className="flex items-center justify-between px-4 bg-surface-900 border-b border-surface-800/80">
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setActiveTab("plan")}
+                  className={`px-4 py-3 text-xs font-semibold font-display border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === "plan"
+                      ? "border-brand-500 text-brand-400 bg-surface-800/35"
+                      : "border-transparent text-surface-400 hover:text-surface-200"
+                  }`}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  plan.md (Prompt)
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("gs")}
+                  className={`px-4 py-3 text-xs font-semibold font-display border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === "gs"
+                      ? "border-brand-500 text-brand-400 bg-surface-800/35"
+                      : "border-transparent text-surface-400 hover:text-surface-200"
+                  }`}
+                >
+                  <Terminal className="h-3.5 w-3.5" />
+                  code.gs
+                  {!isSaved && activeTab === "gs" && <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />}
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("html")}
+                  className={`px-4 py-3 text-xs font-semibold font-display border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === "html"
+                      ? "border-brand-500 text-brand-400 bg-surface-800/35"
+                      : "border-transparent text-surface-400 hover:text-surface-200"
+                  }`}
+                >
+                  <FileCode className="h-3.5 w-3.5" />
+                  index.html
+                  {!isSaved && activeTab === "html" && <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />}
+                </button>
+              </div>
+
+              {/* Action utilities */}
+              <div className="flex gap-2 py-1.5">
+                {activeTab === "plan" ? (
+                  <>
+                    <button
+                      onClick={() => handleCopy(prompt.outputMd)}
+                      className="text-[10px] font-semibold text-surface-300 hover:text-white bg-surface-800 border border-surface-700 rounded-md py-1 px-2.5 flex items-center gap-1 cursor-pointer transition"
+                    >
+                      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      Salin Prompt
+                    </button>
+                    <button
+                      onClick={() => handleDownloadFile(`${prompt.appName.replace(/\s+/g, "_")}_plan.md`, prompt.outputMd)}
+                      className="text-[10px] font-semibold text-surface-300 hover:text-white bg-surface-800 border border-surface-700 rounded-md py-1 px-2.5 flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download .md
+                    </button>
+                  </>
+                ) : (
+                  // Editor controls
+                  isPro && (editedGs || editedHtml) && (
+                    <div className="flex gap-1.5">
+                      {!isSaved && (
+                        <button
+                          onClick={handleManualSave}
+                          className="text-[10px] font-semibold text-white bg-green-600 hover:bg-green-500 rounded-md py-1.5 px-2.5 flex items-center gap-1 cursor-pointer transition shadow"
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Simpan Perubahan
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleCopy(activeTab === "gs" ? editedGs : editedHtml)}
+                        className="text-[10px] font-semibold text-surface-300 hover:text-white bg-surface-800 border border-surface-700 rounded-md py-1 px-2.5 flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Salin Kode
+                      </button>
+                      <button
+                        onClick={() =>
+                          handleDownloadFile(
+                            activeTab === "gs" ? "code.gs" : "index.html",
+                            activeTab === "gs" ? editedGs : editedHtml
+                          )
+                        }
+                        className="text-[10px] font-semibold text-surface-300 hover:text-white bg-surface-800 border border-surface-700 rounded-md py-1 px-2.5 flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <Download className="h-3 w-3" />
+                        Download
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Content body */}
+            <div className="flex-1 flex flex-col p-4 bg-surface-950/40">
+              
+              {/* TAB 1: Markdown Prompt Plan */}
+              {activeTab === "plan" && (
+                <div className="flex-1 overflow-y-auto max-h-[650px] pr-2 space-y-4">
+                  {/* Guide Toggle */}
+                  <div className="border border-surface-800 rounded-xl overflow-hidden bg-surface-900/30">
+                    <button
+                      onClick={() => setGuideOpen(!guideOpen)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-brand-400" />
+                        <span className="font-semibold text-white text-xs">Cara Menggunakan Prompt Ini</span>
+                      </div>
+                      {guideOpen ? (
+                        <ChevronUp className="h-4 w-4 text-surface-400" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-surface-400" />
+                      )}
+                    </button>
+                    {guideOpen && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-surface-800/60 pt-3 animate-fade-up">
+                        {[
+                          { step: "1", desc: 'Klik tombol "Salin Prompt" di kanan atas.' },
+                          { step: "2", desc: "Buka chatbot AI seperti ChatGPT atau Claude." },
+                          { step: "3", desc: 'Tempelkan prompt ini ke AI dan minta: "Tuliskan kode lengkap code.gs dan index.html berdasarkan plan ini secara lengkap."' },
+                          { step: "4", desc: "Buka Google Sheets, ke Extensions > Apps Script, dan pasang kodenya." },
+                        ].map((s) => (
+                          <div key={s.step} className="flex gap-3 text-xs leading-relaxed">
+                            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-brand-600 text-white font-bold text-[10px]">
+                              {s.step}
+                            </div>
+                            <div className="text-surface-400">{s.desc}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rendered Prompt Output */}
+                  <div
+                    className="p-4 sm:p-6 md-output select-text selection:bg-brand-500/30"
+                    dangerouslySetInnerHTML={{ __html: renderMd(prompt.outputMd) }}
+                  />
+                </div>
+              )}
+
+              {/* TAB 2 & 3: Code Editors */}
+              {activeTab !== "plan" && (
+                <div className="flex-1 flex flex-col h-full">
+                  {!isPro ? (
+                    // Locked state for Free Tier Users
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed border-surface-800 rounded-xl bg-surface-900/10">
+                      <div className="p-3 bg-brand-500/10 text-brand-400 rounded-2xl mb-3">
+                        <Lock className="h-8 w-8" />
+                      </div>
+                      <h3 className="font-bold text-white text-base font-display">Fitur Khusus Paket Pro</h3>
+                      <p className="text-xs text-surface-400 max-w-sm mt-1 mb-4 leading-relaxed">
+                        Pengguna Pro/Business dapat men-generate kode, mengedit secara langsung di panel workspace ini, dan menyempurnakannya secara interaktif menggunakan AI Chatbot.
+                      </p>
+                      <button
+                        onClick={togglePlanSimulate}
+                        className="btn-primary flex items-center gap-1.5 text-xs !py-2.5"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Aktifkan Pro Sekarang (Demo)
+                      </button>
+                    </div>
+                  ) : (
+                    // Pro editor layout
+                    <>
+                      {/* Empty state: code not yet generated */}
+                      {((activeTab === "gs" && !editedGs) || (activeTab === "html" && !editedHtml)) ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed border-surface-800 rounded-xl bg-surface-900/10">
+                          {firstGenLoading ? (
+                            <>
+                              <div className="h-10 w-10 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mb-4" />
+                              <p className="font-semibold text-brand-300 text-sm animate-pulse">Menghubungi AI Model...</p>
+                              <p className="text-[10px] text-surface-500 mt-1 max-w-xs leading-relaxed">
+                                AI sedang menganalisis plan.md dan menyusun kode backend (`code.gs`) beserta frontend (`index.html`) yang bebas error...
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="p-3 bg-brand-500/15 text-brand-300 rounded-2xl mb-3">
+                                <Sparkles className="h-7 w-7" />
+                              </div>
+                              <h3 className="font-semibold text-white text-sm font-display">Kode Belum Dibuat</h3>
+                              <p className="text-xs text-surface-400 max-w-xs mt-1 mb-4 leading-relaxed">
+                                Klik tombol di bawah untuk meminta AI menghasilkan file backend & frontend awal berdasarkan prompt plan.md secara otomatis.
+                              </p>
+                              <button
+                                onClick={handleGenerateFirstTime}
+                                className="btn-primary flex items-center gap-1.5 text-xs"
+                              >
+                                <Terminal className="h-4 w-4" />
+                                Generate Kode Pertama Kali
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        // Code editor workspace
+                        <div className="flex-1 flex flex-col h-full min-h-[500px]">
+                          <div className="flex items-center justify-between text-[10px] text-surface-500 mb-1 px-1 font-mono">
+                            <span>SUNTING KODE MANUAL (Ketik langsung di sini):</span>
+                            <span>{!isSaved ? "⚠️ Perubahan belum disimpan" : "✓ Tersimpan otomatis ke browser"}</span>
+                          </div>
+                          <textarea
+                            value={activeTab === "gs" ? editedGs : editedHtml}
+                            onChange={(e) => {
+                              if (activeTab === "gs") setEditedGs(e.target.value);
+                              else setEditedHtml(e.target.value);
+                              setIsSaved(false);
+                            }}
+                            className="flex-1 w-full bg-surface-950 text-brand-300 p-4 rounded-xl font-mono text-xs border border-surface-800 focus:outline-none focus:ring-1 focus:ring-brand-500/35 overflow-y-auto resize-none min-h-[480px]"
+                            placeholder={activeTab === "gs" ? "// Ketik kode Apps Script Anda..." : "<!-- Ketik kode HTML Anda... -->"}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT PANEL: AI Chatbot */}
+          <div className="glass rounded-2xl overflow-hidden flex flex-col h-[600px] border border-surface-800">
+            {/* Chat header */}
+            <div className="px-4 py-3.5 bg-surface-900 border-b border-surface-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-brand-400" />
+                <span className="font-bold text-white text-xs font-display">Asisten AI Chatbot</span>
+              </div>
+              
+              {isPro && profile && (
+                <div className="text-[10px] text-surface-500 font-mono">
+                  Kuota Chat: <span className="font-semibold text-brand-400">{profile.chatQuotaUsed}</span> / {profile.chatQuotaLimit}
+                </div>
+              )}
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-surface-950/20 flex flex-col">
+              {!isPro ? (
+                // Locked status for Free users
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                  <Lock className="h-10 w-10 text-surface-600 mb-2" />
+                  <h4 className="font-semibold text-white text-xs font-display">Chatbot Terkunci</h4>
+                  <p className="text-[10px] text-surface-400 max-w-[220px] mt-0.5 leading-relaxed">
+                    Tingkatkan ke paket Pro untuk mengakses asisten bot AI interaktif yang langsung mengubah kode di editor.
+                  </p>
+                </div>
+              ) : chatMessages.length === 0 ? (
+                // Welcoming message
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 text-surface-400">
+                  <Sparkles className="h-8 w-8 text-brand-400 mb-2 animate-pulse" />
+                  <p className="text-xs font-semibold text-white">Butuh Modifikasi Tambahan?</p>
+                  <p className="text-[10px] text-surface-500 max-w-[250px] mt-1 leading-relaxed">
+                    Ketik perintah Anda di bawah untuk merevisi fitur, mengganti warna tema, menambah sheet baru, dsb. AI akan otomatis memperbarui kode Anda!
+                  </p>
+                </div>
+              ) : (
+                // List of conversation messages
+                chatMessages.map((msg, i) => {
+                  const isUser = msg.role === "user";
+                  const displayContent = isUser && (msg.content.includes("plan berikut:") || msg.content.length > 500)
+                    ? "✨ Generate kode awal dari plan.md"
+                    : msg.content;
+                  return (
+                    <div
+                      key={i}
+                      className={`flex flex-col max-w-[85%] ${isUser ? "self-end items-end" : "self-start items-start"}`}
+                    >
+                      <span className="text-[9px] text-surface-500 mb-1 px-1 font-mono">
+                        {isUser ? "Anda" : "AI Asisten"}
+                      </span>
+                      <div
+                        className={`p-3 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                          isUser
+                            ? "bg-gradient-to-br from-brand-600 to-indigo-600 text-white shadow-md rounded-tr-none"
+                            : "bg-surface-850 border border-surface-800 text-surface-200 rounded-tl-none select-text"
+                        }`}
+                      >
+                        {displayContent}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Chat loading state indicator */}
+              {chatLoading && (
+                <div className="flex flex-col max-w-[85%] self-start items-start animate-pulse">
+                  <span className="text-[9px] text-surface-500 mb-1 px-1 font-mono">AI Asisten</span>
+                  <div className="bg-surface-850 border border-surface-800 p-3 rounded-2xl rounded-tl-none text-xs text-brand-400 flex items-center gap-1.5">
+                    <div className="flex gap-1">
+                      <span className="h-1.5 w-1.5 bg-brand-400 rounded-full animate-bounce" />
+                      <span className="h-1.5 w-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <span className="h-1.5 w-1.5 bg-brand-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    </div>
+                    Sedang menulis ulang kode...
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat Input form */}
+            <form onSubmit={handleSendMessage} className="p-3 bg-surface-900 border-t border-surface-800/80">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder={
+                    !isPro
+                      ? "Khusus Paket Pro..."
+                      : chatLoading
+                      ? "Harap tunggu..."
+                      : "Ketik perintah (contoh: 'tambah field email')..."
+                  }
+                  disabled={!isPro || chatLoading}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-xl bg-surface-950 border border-surface-800 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-xs disabled:opacity-40"
+                />
+                <button
+                  type="submit"
+                  disabled={!isPro || chatLoading || !chatInput.trim()}
+                  className="bg-brand-600 hover:bg-brand-500 text-white p-2 rounded-xl transition flex items-center justify-center shrink-0 disabled:opacity-40 disabled:hover:bg-brand-600 cursor-pointer"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Quota Limit / Warning Modal ─── */}
+      {showQuotaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="glass border border-surface-800 rounded-2xl p-6 max-w-md w-full mx-4 animate-fade-up">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-yellow-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white font-display">Kuota Chat Habis</h3>
+            </div>
+            <p className="text-xs text-surface-400 mb-6 leading-relaxed">
+              Kuota chat AI di Workspace Pro Anda telah mencapai batas maksimal ({profile?.chatQuotaLimit} per bulan). Silakan hubungi admin atau upgrade paket berlangganan untuk kuota yang lebih besar.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowQuotaModal(false)} className="btn-ghost flex-1 text-xs">
+                Tutup
+              </button>
+              <button
+                onClick={() => {
+                  setShowQuotaModal(false);
+                  togglePlanSimulate();
+                }}
+                className="btn-primary flex-1 text-xs"
+              >
+                Reset Kuota (Demo)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
