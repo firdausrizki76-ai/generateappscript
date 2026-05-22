@@ -174,6 +174,9 @@ Tugas Anda:
         response_format: {
           type: "json_object",
         },
+        provider: {
+          ignore: ["DeepInfra"],
+        },
       };
 
       const res = await fetchOpenRouterWithRetry(openRouterUrl, {
