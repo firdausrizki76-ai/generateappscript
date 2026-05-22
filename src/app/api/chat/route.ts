@@ -134,7 +134,22 @@ export async function POST(req: Request) {
       };
     } else {
       // Call real OpenRouter API
-      const systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script. 
+      const lastUserMsg = messages[messages.length - 1]?.content || "";
+      const isGreeting = isCasualGreeting(lastUserMsg);
+
+      let systemPrompt = "";
+
+      if (isGreeting) {
+        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script.
+Sapa pengguna dengan ramah dalam bahasa Indonesia dan tanyakan bantuan apa yang mereka butuhkan terkait Google Apps Script atau pembuatan HTML/CSS.
+JANGAN membuat atau mengubah kode apa pun. Anda harus mengembalikan respons berformat JSON yang valid dengan skema berikut:
+{
+  "explanation": "Balasan sapaan ramah Anda kepada pengguna",
+  "codeGs": "",
+  "codeHtml": ""
+}`;
+      } else {
+        systemPrompt = `Anda adalah asisten pengembang ahli Google Apps Script. 
 Tugas Anda adalah memperbarui atau memodifikasi file backend (code.gs) dan frontend (index.html) aplikasi Google Apps Script berdasarkan permintaan pengguna.
 Aplikasi saat ini: "${appName}" - Deskripsi: "${appDescription}"
 
@@ -157,6 +172,7 @@ Tugas Anda:
 }
 5. PENTING UNTUK EFISIENSI & KECEPATAN: Jika permintaan pengguna hanyalah pertanyaan umum, penjelasan kode, obrolan santai, atau tidak memerlukan perubahan kode sama sekali, Anda HARUS mengembalikan string kosong ("") pada kolom "codeGs" dan/atau "codeHtml". Hanya isi kode lengkap jika ada perubahan/modifikasi nyata pada file tersebut. Jika salah satu file tidak berubah, isi file yang tidak berubah tersebut dengan string kosong ("").
 6. KEPATUHAN FORMAT: Semua respons Anda HARUS berupa objek JSON dengan format di atas, tanpa teks pengantar atau penutup di luar objek JSON tersebut. Jika pengguna hanya menyapa atau mengobrol biasa, isi field "explanation" dengan balasan Anda dan isi "codeGs" serta "codeHtml" dengan string kosong (""). JANGAN mengembalikan teks biasa tanpa format JSON.`;
+      }
 
       const formattedMessages = [
         { role: "system", content: systemPrompt },
@@ -290,4 +306,16 @@ async function fetchOpenRouterWithRetry(
   }
 
   throw lastError || new Error("Failed to connect to OpenRouter API after multiple retries");
+}
+
+function isCasualGreeting(text: string): boolean {
+  const clean = text.trim().toLowerCase().replace(/[^a-z\s]/g, "");
+  const greetings = [
+    "hi", "hello", "halo", "hei", "hey", "p", "test", "tes", "ping", "pinging",
+    "pagi", "siang", "sore", "malam", "assalamualaikum", "selamat pagi", 
+    "selamat siang", "selamat sore", "selamat malam", "apa kabar", "apakabar", 
+    "oi", "bro", "sis", "halo asisten", "halo ai", "hello ai", "hello assistant",
+    "hey ai", "hey assistant"
+  ];
+  return greetings.includes(clean) || clean.length <= 2;
 }
