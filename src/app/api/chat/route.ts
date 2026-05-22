@@ -161,7 +161,8 @@ Tugas Anda:
         parts: [{ text: m.content }],
       }));
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
       const payload = {
         contents,
