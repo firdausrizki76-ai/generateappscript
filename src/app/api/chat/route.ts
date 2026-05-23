@@ -195,7 +195,7 @@ Format:
           })),
       ];
 
-      const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat";
+      const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-pro";
       const openRouterUrl = "https://openrouter.ai/api/v1/chat/completions";
 
       const payload = {
