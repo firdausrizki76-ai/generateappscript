@@ -34,6 +34,58 @@ import {
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 
+// Helper to extract content inside [TAG]...[/TAG] or to the end of string if not closed yet
+const parseTaggedContent = (text: string) => {
+  const extractTag = (startTag: string, endTag: string) => {
+    const startIdx = text.indexOf(startTag);
+    if (startIdx === -1) return "";
+    const contentStartIdx = startIdx + startTag.length;
+    const endIdx = text.indexOf(endTag, contentStartIdx);
+    return endIdx === -1 ? text.substring(contentStartIdx) : text.substring(contentStartIdx, endIdx);
+  };
+
+  const hasExplanation = text.includes("[EXPLANATION]");
+  const hasGs = text.includes("[CODE_GS]");
+  const hasHtml = text.includes("[CODE_HTML]");
+
+  let explanation = "";
+  let codeGs = "";
+  let codeHtml = "";
+
+  const cleanLeading = (str: string) => str.replace(/^\s+/, "");
+
+  if (hasExplanation) {
+    explanation = cleanLeading(extractTag("[EXPLANATION]", "[/EXPLANATION]"));
+  } else {
+    // If we don't have the [EXPLANATION] tag yet:
+    // Check if the current text is just a prefix of "[EXPLANATION]"
+    const prefixOfTag = "[EXPLANATION]".startsWith(text);
+    if (!prefixOfTag && !hasGs && !hasHtml) {
+      explanation = cleanLeading(text);
+    }
+  }
+
+  if (hasGs) {
+    codeGs = cleanLeading(extractTag("[CODE_GS]", "[/CODE_GS]"));
+  }
+  if (hasHtml) {
+    codeHtml = cleanLeading(extractTag("[CODE_HTML]", "[/CODE_HTML]"));
+  }
+
+  return { explanation, codeGs, codeHtml };
+};
+
+// Helper to filter out tag prefix/tag from raw explanation stream safely
+const getBubbleContent = (text: string, parsedContent: ReturnType<typeof parseTaggedContent>) => {
+  if (text.includes("[EXPLANATION]")) {
+    return parsedContent.explanation;
+  }
+  if ("[EXPLANATION]".startsWith(text)) {
+    return "";
+  }
+  return text;
+};
+
 export default function ResultPage() {
   const router = useRouter();
   const params = useParams();
@@ -154,64 +206,161 @@ export default function ResultPage() {
 
     setFirstGenLoading(true);
     let currentGs = editedGs;
+    let latestChat = chatMessages;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+      }
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Konfigurasi Supabase tidak lengkap di environment.");
+      }
+
+      const decoder = new TextDecoder();
+
       // Langkah 1: Generate code.gs (hanya jika belum dibuat)
       if (!currentGs) {
+        setActiveTab("gs");
         setFirstGenStatus("Menghasilkan kode backend (code.gs)... (Langkah 1/2)");
-        const initialMessagesGs: { role: "user" | "assistant"; content: string }[] = [
+        
+        const initialMessagesGs = [
           {
-            role: "user",
+            role: "user" as const,
             content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}`,
           },
         ];
 
-        const gsRes = await supabase.functions.invoke("chat", {
-          body: {
+        // Add placeholder chat messages
+        const userMsg = { role: "user" as const, content: "✨ Generate kode backend" };
+        const assistantTempMsg = { role: "assistant" as const, content: "" };
+        const updatedChat = [...latestChat, userMsg, assistantTempMsg];
+        setChatMessages(updatedChat);
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+            "apikey": supabaseAnonKey,
+          },
+          body: JSON.stringify({
             appName: prompt.appName,
             appDescription: prompt.description,
             codeGs: "",
             codeHtml: "",
             generateType: "gs",
             messages: initialMessagesGs,
-          },
+          }),
         });
 
-        const gsResult = gsRes.data;
-        const gsError = gsRes.error;
-
-        if (gsError || !gsResult || !gsResult.success) {
-          throw new Error(gsError?.message || gsResult?.error || "Gagal men-generate kode backend (code.gs).");
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(errText || "Gagal memproses streaming backend.");
         }
 
-        currentGs = gsResult.codeGs;
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("Response stream is not available.");
+        }
+        
+        let done = false;
+        let buffer = "";
+        let accumulatedText = "";
+
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+          if (value) {
+            buffer += decoder.decode(value, { stream: !done });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed === "data: [DONE]") continue;
+              if (trimmed.startsWith("data: ")) {
+                try {
+                  const parsed = JSON.parse(trimmed.slice(6));
+                  const content = parsed.choices?.[0]?.delta?.content || "";
+                  accumulatedText += content;
+
+                  const parsedContent = parseTaggedContent(accumulatedText);
+
+                  if (parsedContent.codeGs) {
+                    setEditedGs(parsedContent.codeGs);
+                  }
+
+                  const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
+                  setChatMessages((prev) => {
+                    const next = [...prev];
+                    if (next.length > 0) {
+                      next[next.length - 1] = {
+                        role: "assistant",
+                        content: bubbleContent || "Membuat backend...",
+                      };
+                    }
+                    return next;
+                  });
+                } catch (e) {
+                  // Ignore partial chunk parse error
+                }
+              }
+            }
+          }
+        }
+
+        const finalParsed = parseTaggedContent(accumulatedText);
+        currentGs = finalParsed.codeGs;
         setEditedGs(currentGs);
 
-        // Simpan progress backend langsung ke database agar tidak rugi kuota API jika langkah 2 gagal
         const gsAssistantMessage = {
           role: "assistant" as const,
-          content: (gsResult.explanation || "") + "\n\n✓ Kode backend (code.gs) berhasil dibuat. Melanjutkan pembuatan frontend...",
+          content: (finalParsed.explanation || "") + "\n\n✓ Kode backend (code.gs) berhasil dibuat. Melanjutkan pembuatan frontend...",
         };
-        const updatedChatWithGs = [
-          ...chatMessages,
-          { role: "user" as const, content: "✨ Generate kode backend" },
-          gsAssistantMessage
+
+        latestChat = [
+          ...latestChat,
+          userMsg,
+          gsAssistantMessage,
         ];
-        setChatMessages(updatedChatWithGs);
-        await saveWorkspaceToHistory(currentGs, "", updatedChatWithGs);
+        setChatMessages(latestChat);
+        await saveWorkspaceToHistory(currentGs, "", latestChat);
       }
 
       // Langkah 2: Generate index.html (skip quota increment karena kelanjutan transaksi)
+      setActiveTab("html");
       setFirstGenStatus("Menghasilkan kode frontend (index.html)... (Langkah 2/2)");
-      const initialMessagesHtml: { role: "user" | "assistant"; content: string }[] = [
+
+      const initialMessagesHtml = [
         {
-          role: "user",
+          role: "user" as const,
           content: `Buatkan kode frontend (index.html) saja menyesuaikan kode backend berikut:\n\n${currentGs}`,
         },
       ];
 
-      const htmlRes = await supabase.functions.invoke("chat", {
-        body: {
+      const userHtmlMsg = { role: "user" as const, content: "✨ Generate kode frontend" };
+      const assistantHtmlTempMsg = { role: "assistant" as const, content: "" };
+      const nextChatWithHtmlPlaceholder = [
+        ...latestChat,
+        userHtmlMsg,
+        assistantHtmlTempMsg,
+      ];
+      setChatMessages(nextChatWithHtmlPlaceholder);
+
+      const responseHtml = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "apikey": supabaseAnonKey,
+        },
+        body: JSON.stringify({
           appName: prompt.appName,
           appDescription: prompt.description,
           codeGs: currentGs,
@@ -219,29 +368,79 @@ export default function ResultPage() {
           generateType: "html",
           skipQuotaIncrement: true,
           messages: initialMessagesHtml,
-        },
+        }),
       });
 
-      const htmlResult = htmlRes.data;
-      const htmlError = htmlRes.error;
-
-      if (htmlError || !htmlResult || !htmlResult.success) {
-        throw new Error(htmlError?.message || htmlResult?.error || "Gagal men-generate kode frontend (index.html).");
+      if (!responseHtml.ok) {
+        const errText = await responseHtml.text();
+        throw new Error(errText || "Gagal memproses streaming frontend.");
       }
 
-      const generatedHtml = htmlResult.codeHtml;
+      const readerHtml = responseHtml.body?.getReader();
+      if (!readerHtml) {
+        throw new Error("Response stream is not available.");
+      }
+
+      let doneHtml = false;
+      let bufferHtml = "";
+      let accumulatedTextHtml = "";
+
+      while (!doneHtml) {
+        const { value, done: doneReading } = await readerHtml.read();
+        doneHtml = doneReading;
+        if (value) {
+          bufferHtml += decoder.decode(value, { stream: !doneHtml });
+          const lines = bufferHtml.split("\n");
+          bufferHtml = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(trimmed.slice(6));
+                const content = parsed.choices?.[0]?.delta?.content || "";
+                accumulatedTextHtml += content;
+
+                const parsedContent = parseTaggedContent(accumulatedTextHtml);
+
+                if (parsedContent.codeHtml) {
+                  setEditedHtml(parsedContent.codeHtml);
+                }
+
+                const bubbleContent = getBubbleContent(accumulatedTextHtml, parsedContent);
+                setChatMessages((prev) => {
+                  const next = [...prev];
+                  if (next.length > 0) {
+                    next[next.length - 1] = {
+                      role: "assistant",
+                      content: bubbleContent || "Membuat frontend...",
+                    };
+                  }
+                  return next;
+                });
+              } catch (e) {
+                // Ignore partial JSON parsing errors
+              }
+            }
+          }
+        }
+      }
+
+      const finalParsedHtml = parseTaggedContent(accumulatedTextHtml);
+      const generatedHtml = finalParsedHtml.codeHtml;
       setEditedHtml(generatedHtml);
       setIsSaved(true);
 
       const htmlAssistantMessage = {
         role: "assistant" as const,
-        content: (htmlResult.explanation || "") + "\n\n✓ Kode frontend (index.html) berhasil dibuat! Silakan periksa tab editor di sebelah kiri.",
+        content: (finalParsedHtml.explanation || "") + "\n\n✓ Kode frontend (index.html) berhasil dibuat! Silakan periksa tab editor di sebelah kiri.",
       };
 
       const finalChat = [
-        ...chatMessages,
-        { role: "user" as const, content: "✨ Generate kode frontend" },
-        htmlAssistantMessage
+        ...latestChat,
+        userHtmlMsg,
+        htmlAssistantMessage,
       ];
       setChatMessages(finalChat);
 
@@ -254,6 +453,14 @@ export default function ResultPage() {
       setActiveTab("gs");
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
+      // Clean up the trailing empty assistant message if we failed during stream
+      setChatMessages((prev) => {
+        const next = [...prev];
+        if (next.length > 0 && next[next.length - 1].role === "assistant" && !next[next.length - 1].content) {
+          next.pop();
+        }
+        return next;
+      });
     } finally {
       setFirstGenLoading(false);
       setFirstGenStatus("");
@@ -282,38 +489,127 @@ export default function ResultPage() {
     setChatInput("");
     setChatLoading(true);
 
+    const assistantTempMsg = { role: "assistant" as const, content: "" };
+    setChatMessages([...nextMessages, assistantTempMsg]);
+
     try {
-      const { data: result, error: functionError } = await supabase.functions.invoke("chat", {
-        body: {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+      }
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Konfigurasi Supabase tidak lengkap.");
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "apikey": supabaseAnonKey,
+        },
+        body: JSON.stringify({
           appName: prompt.appName,
           appDescription: prompt.description,
           codeGs: editedGs,
           codeHtml: editedHtml,
           messages: nextMessages,
-        },
+        }),
       });
 
-      if (functionError || !result || !result.success) {
-        throw new Error(functionError?.message || result?.error || "Terjadi kegagalan komunikasi.");
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Gagal memproses streaming revisi.");
       }
 
-      // Sync edited files with AI output (only if the AI returned code, otherwise preserve existing local code)
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Response stream is not available.");
+      }
+
+      const decoder = new TextDecoder();
+      let done = false;
+      let buffer = "";
+      let accumulatedText = "";
+      let autoSwitchedGs = false;
+      let autoSwitchedHtml = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(trimmed.slice(6));
+                const content = parsed.choices?.[0]?.delta?.content || "";
+                accumulatedText += content;
+
+                const parsedContent = parseTaggedContent(accumulatedText);
+
+                if (accumulatedText.includes("[CODE_GS]")) {
+                  setEditedGs(parsedContent.codeGs);
+                  if (!autoSwitchedGs) {
+                    autoSwitchedGs = true;
+                    setActiveTab("gs");
+                  }
+                }
+                if (accumulatedText.includes("[CODE_HTML]")) {
+                  setEditedHtml(parsedContent.codeHtml);
+                  if (!autoSwitchedHtml) {
+                    autoSwitchedHtml = true;
+                    setActiveTab("html");
+                  }
+                }
+
+                const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
+                setChatMessages((prev) => {
+                  const next = [...prev];
+                  if (next.length > 0) {
+                    next[next.length - 1] = {
+                      role: "assistant",
+                      content: bubbleContent || "Berpikir...",
+                    };
+                  }
+                  return next;
+                });
+              } catch (e) {
+                // Ignore partial JSON parsing errors
+              }
+            }
+          }
+        }
+      }
+
+      const finalParsed = parseTaggedContent(accumulatedText);
+
       let nextGs = editedGs;
       let nextHtml = editedHtml;
 
-      if (result.codeGs && result.codeGs.trim() !== "") {
-        setEditedGs(result.codeGs);
-        nextGs = result.codeGs;
+      if (accumulatedText.includes("[CODE_GS]")) {
+        nextGs = finalParsed.codeGs;
+        setEditedGs(nextGs);
       }
-      if (result.codeHtml && result.codeHtml.trim() !== "") {
-        setEditedHtml(result.codeHtml);
-        nextHtml = result.codeHtml;
+      if (accumulatedText.includes("[CODE_HTML]")) {
+        nextHtml = finalParsed.codeHtml;
+        setEditedHtml(nextHtml);
       }
       setIsSaved(true);
 
       const assistantMsg = {
         role: "assistant" as const,
-        content: result.explanation,
+        content: finalParsed.explanation || accumulatedText,
       };
 
       const finalMessages = [...nextMessages, assistantMsg];
@@ -324,13 +620,21 @@ export default function ResultPage() {
       setProfile(updatedProf);
 
       // Save database record
-      saveWorkspaceToHistory(nextGs, nextHtml, finalMessages);
+      await saveWorkspaceToHistory(nextGs, nextHtml, finalMessages);
     } catch (err: any) {
       const errorMsg = {
         role: "assistant" as const,
         content: `❌ Gagal memproses permintaan: ${err.message || "Gangguan koneksi API."}`,
       };
-      setChatMessages((prev) => [...prev, errorMsg]);
+      setChatMessages((prev) => {
+        const next = [...prev];
+        if (next.length > 0) {
+          next[next.length - 1] = errorMsg;
+        } else {
+          next.push(errorMsg);
+        }
+        return next;
+      });
     } finally {
       setChatLoading(false);
     }
