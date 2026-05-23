@@ -194,19 +194,161 @@ export default function ResultPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Generate code.gs & index.html for the first time
-  const handleGenerateFirstTime = async () => {
+  // Generate code.gs (Backend)
+  const handleGenerateGs = async () => {
     if (!prompt || !profile) return;
 
-    // Check Chat Quota for Pro Users
     if (profile.chatQuotaUsed >= profile.chatQuotaLimit) {
       setShowQuotaModal(true);
       return;
     }
 
     setFirstGenLoading(true);
-    let currentGs = editedGs;
-    let latestChat = chatMessages;
+    setFirstGenStatus("Menghasilkan kode backend (code.gs)...");
+    
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+      }
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Konfigurasi Supabase tidak lengkap di environment.");
+      }
+
+      const initialMessagesGs = [
+        {
+          role: "user" as const,
+          content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}`,
+        },
+      ];
+
+      const userMsg = { role: "user" as const, content: "✨ Generate kode backend" };
+      const assistantTempMsg = { role: "assistant" as const, content: "" };
+      const updatedChat = [...chatMessages, userMsg, assistantTempMsg];
+      setChatMessages(updatedChat);
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "apikey": supabaseAnonKey,
+        },
+        body: JSON.stringify({
+          appName: prompt.appName,
+          appDescription: prompt.description,
+          codeGs: "",
+          codeHtml: "",
+          generateType: "gs",
+          messages: initialMessagesGs,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Gagal memproses streaming backend.");
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Response stream is not available.");
+      }
+
+      const decoder = new TextDecoder();
+      let done = false;
+      let buffer = "";
+      let accumulatedText = "";
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(trimmed.slice(6));
+                const content = parsed.choices?.[0]?.delta?.content || "";
+                accumulatedText += content;
+
+                const parsedContent = parseTaggedContent(accumulatedText);
+
+                if (parsedContent.codeGs) {
+                  setEditedGs(parsedContent.codeGs);
+                }
+
+                const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
+                setChatMessages((prev) => {
+                  const next = [...prev];
+                  if (next.length > 0) {
+                    next[next.length - 1] = {
+                      role: "assistant",
+                      content: bubbleContent || "Membuat backend...",
+                    };
+                  }
+                  return next;
+                });
+              } catch (e) {
+                // Ignore partial JSON parse errors
+              }
+            }
+          }
+        }
+      }
+
+      const finalParsed = parseTaggedContent(accumulatedText);
+      const generatedGs = finalParsed.codeGs;
+      setEditedGs(generatedGs);
+
+      const gsAssistantMessage = {
+        role: "assistant" as const,
+        content: (finalParsed.explanation || "") + "\n\n✓ Kode backend (code.gs) berhasil dibuat. Silakan periksa tab editor di sebelah kiri.",
+      };
+
+      const finalChat = [
+        ...chatMessages,
+        userMsg,
+        gsAssistantMessage,
+      ];
+      setChatMessages(finalChat);
+
+      // Refresh profile quota from DB
+      const updatedProf = await getProfile();
+      setProfile(updatedProf);
+
+      // Simpan ke database
+      await saveWorkspaceToHistory(generatedGs, editedHtml, finalChat);
+    } catch (err: any) {
+      alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
+      setChatMessages((prev) => {
+        const next = [...prev];
+        if (next.length > 0 && next[next.length - 1].role === "assistant" && !next[next.length - 1].content) {
+          next.pop();
+        }
+        return next;
+      });
+    } finally {
+      setFirstGenLoading(false);
+      setFirstGenStatus("");
+    }
+  };
+
+  // Generate index.html (Frontend)
+  const handleGenerateHtml = async () => {
+    if (!prompt || !profile || !editedGs) return;
+
+    setFirstGenLoading(true);
+    setFirstGenStatus("Menghasilkan kode frontend (index.html)...");
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -222,136 +364,17 @@ export default function ResultPage() {
         throw new Error("Konfigurasi Supabase tidak lengkap di environment.");
       }
 
-      const decoder = new TextDecoder();
-
-      // Langkah 1: Generate code.gs (hanya jika belum dibuat)
-      if (!currentGs) {
-        setActiveTab("gs");
-        setFirstGenStatus("Menghasilkan kode backend (code.gs)... (Langkah 1/2)");
-        
-        const initialMessagesGs = [
-          {
-            role: "user" as const,
-            content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}`,
-          },
-        ];
-
-        // Add placeholder chat messages
-        const userMsg = { role: "user" as const, content: "✨ Generate kode backend" };
-        const assistantTempMsg = { role: "assistant" as const, content: "" };
-        const updatedChat = [...latestChat, userMsg, assistantTempMsg];
-        setChatMessages(updatedChat);
-
-        const response = await fetch(`${supabaseUrl}/functions/v1/chat`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "apikey": supabaseAnonKey,
-          },
-          body: JSON.stringify({
-            appName: prompt.appName,
-            appDescription: prompt.description,
-            codeGs: "",
-            codeHtml: "",
-            generateType: "gs",
-            messages: initialMessagesGs,
-          }),
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(errText || "Gagal memproses streaming backend.");
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error("Response stream is not available.");
-        }
-        
-        let done = false;
-        let buffer = "";
-        let accumulatedText = "";
-
-        while (!done) {
-          const { value, done: doneReading } = await reader.read();
-          done = doneReading;
-          if (value) {
-            buffer += decoder.decode(value, { stream: !done });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || trimmed === "data: [DONE]") continue;
-              if (trimmed.startsWith("data: ")) {
-                try {
-                  const parsed = JSON.parse(trimmed.slice(6));
-                  const content = parsed.choices?.[0]?.delta?.content || "";
-                  accumulatedText += content;
-
-                  const parsedContent = parseTaggedContent(accumulatedText);
-
-                  if (parsedContent.codeGs) {
-                    setEditedGs(parsedContent.codeGs);
-                  }
-
-                  const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
-                  setChatMessages((prev) => {
-                    const next = [...prev];
-                    if (next.length > 0) {
-                      next[next.length - 1] = {
-                        role: "assistant",
-                        content: bubbleContent || "Membuat backend...",
-                      };
-                    }
-                    return next;
-                  });
-                } catch (e) {
-                  // Ignore partial chunk parse error
-                }
-              }
-            }
-          }
-        }
-
-        const finalParsed = parseTaggedContent(accumulatedText);
-        currentGs = finalParsed.codeGs;
-        setEditedGs(currentGs);
-
-        const gsAssistantMessage = {
-          role: "assistant" as const,
-          content: (finalParsed.explanation || "") + "\n\n✓ Kode backend (code.gs) berhasil dibuat. Melanjutkan pembuatan frontend...",
-        };
-
-        latestChat = [
-          ...latestChat,
-          userMsg,
-          gsAssistantMessage,
-        ];
-        setChatMessages(latestChat);
-        await saveWorkspaceToHistory(currentGs, "", latestChat);
-      }
-
-      // Langkah 2: Generate index.html (skip quota increment karena kelanjutan transaksi)
-      setActiveTab("html");
-      setFirstGenStatus("Menghasilkan kode frontend (index.html)... (Langkah 2/2)");
-
       const initialMessagesHtml = [
         {
           role: "user" as const,
-          content: `Buatkan kode frontend (index.html) saja menyesuaikan kode backend berikut:\n\n${currentGs}`,
+          content: `Buatkan kode frontend (index.html) saja menyesuaikan kode backend berikut:\n\n${editedGs}`,
         },
       ];
 
       const userHtmlMsg = { role: "user" as const, content: "✨ Generate kode frontend" };
       const assistantHtmlTempMsg = { role: "assistant" as const, content: "" };
-      const nextChatWithHtmlPlaceholder = [
-        ...latestChat,
-        userHtmlMsg,
-        assistantHtmlTempMsg,
-      ];
-      setChatMessages(nextChatWithHtmlPlaceholder);
+      const updatedChat = [...chatMessages, userHtmlMsg, assistantHtmlTempMsg];
+      setChatMessages(updatedChat);
 
       const responseHtml = await fetch(`${supabaseUrl}/functions/v1/chat`, {
         method: "POST",
@@ -363,7 +386,7 @@ export default function ResultPage() {
         body: JSON.stringify({
           appName: prompt.appName,
           appDescription: prompt.description,
-          codeGs: currentGs,
+          codeGs: editedGs,
           codeHtml: "",
           generateType: "html",
           skipQuotaIncrement: true,
@@ -381,6 +404,7 @@ export default function ResultPage() {
         throw new Error("Response stream is not available.");
       }
 
+      const decoder = new TextDecoder();
       let doneHtml = false;
       let bufferHtml = "";
       let accumulatedTextHtml = "";
@@ -438,22 +462,16 @@ export default function ResultPage() {
       };
 
       const finalChat = [
-        ...latestChat,
+        ...chatMessages,
         userHtmlMsg,
         htmlAssistantMessage,
       ];
       setChatMessages(finalChat);
 
-      // Refresh profile quota from DB
-      const updatedProf = await getProfile();
-      setProfile(updatedProf);
-
-      // Simpan hasil komplit ke database
-      await saveWorkspaceToHistory(currentGs, generatedHtml, finalChat);
-      setActiveTab("gs");
+      // Simpan ke database
+      await saveWorkspaceToHistory(editedGs, generatedHtml, finalChat);
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
-      // Clean up the trailing empty assistant message if we failed during stream
       setChatMessages((prev) => {
         const next = [...prev];
         if (next.length > 0 && next[next.length - 1].role === "assistant" && !next[next.length - 1].content) {
@@ -920,26 +938,48 @@ export default function ResultPage() {
                             <>
                               <div className="h-10 w-10 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mb-4" />
                               <p className="font-semibold text-brand-300 text-sm animate-pulse">{firstGenStatus || "Menghubungi AI Model..."}</p>
-                              <p className="text-[10px] text-surface-500 mt-1 max-w-xs leading-relaxed">
-                                Proses dipecah menjadi dua tahap (Backend lalu Frontend) agar berjalan lancar dan bebas dari timeout server.
+                            </>
+                          ) : activeTab === "gs" ? (
+                            <>
+                              <div className="p-3 bg-brand-500/15 text-brand-300 rounded-2xl mb-3">
+                                <Sparkles className="h-7 w-7" />
+                              </div>
+                              <h3 className="font-semibold text-white text-sm font-display">Kode Backend Belum Dibuat</h3>
+                              <p className="text-xs text-surface-400 max-w-xs mt-1 mb-4 leading-relaxed">
+                                Klik tombol di bawah untuk menghasilkan file backend (code.gs) awal berdasarkan prompt plan.md.
                               </p>
+                              <button
+                                onClick={handleGenerateGs}
+                                className="btn-primary flex items-center gap-1.5 text-xs"
+                              >
+                                <Terminal className="h-4 w-4" />
+                                Generate code.gs
+                              </button>
                             </>
                           ) : (
                             <>
                               <div className="p-3 bg-brand-500/15 text-brand-300 rounded-2xl mb-3">
                                 <Sparkles className="h-7 w-7" />
                               </div>
-                              <h3 className="font-semibold text-white text-sm font-display">Kode Belum Dibuat</h3>
-                              <p className="text-xs text-surface-400 max-w-xs mt-1 mb-4 leading-relaxed">
-                                Klik tombol di bawah untuk meminta AI menghasilkan file backend & frontend awal berdasarkan prompt plan.md secara otomatis.
-                              </p>
-                              <button
-                                onClick={handleGenerateFirstTime}
-                                className="btn-primary flex items-center gap-1.5 text-xs"
-                              >
-                                <Terminal className="h-4 w-4" />
-                                Generate Kode Pertama Kali
-                              </button>
+                              <h3 className="font-semibold text-white text-sm font-display">Kode Frontend Belum Dibuat</h3>
+                              {!editedGs ? (
+                                <p className="text-xs text-surface-400 max-w-xs mt-1 mb-4 leading-relaxed">
+                                  Silakan buat kode backend (code.gs) terlebih dahulu sebelum membuat kode frontend.
+                                </p>
+                              ) : (
+                                <>
+                                  <p className="text-xs text-surface-400 max-w-xs mt-1 mb-4 leading-relaxed">
+                                    Klik tombol di bawah untuk menghasilkan file frontend (index.html) menyesuaikan kode backend (code.gs) yang sudah ada.
+                                  </p>
+                                  <button
+                                    onClick={handleGenerateHtml}
+                                    className="btn-primary flex items-center gap-1.5 text-xs"
+                                  >
+                                    <FileCode className="h-4 w-4" />
+                                    Generate index.html
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
