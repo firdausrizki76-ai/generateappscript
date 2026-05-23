@@ -66,6 +66,7 @@ export async function POST(req: Request) {
     let { data: quota, error: quotaError } = await supabaseServer
       .from("quota_usage")
       .select("*")
+      .eq("user_id", user.id)
       .eq("month", cycleId)
       .single();
 

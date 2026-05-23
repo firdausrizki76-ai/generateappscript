@@ -58,6 +58,7 @@ export default function ResultPage() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [firstGenLoading, setFirstGenLoading] = useState(false);
+  const [firstGenStatus, setFirstGenStatus] = useState("");
 
   // Quota modal warning
   const [showQuotaModal, setShowQuotaModal] = useState(false);
@@ -152,36 +153,75 @@ export default function ResultPage() {
     }
 
     setFirstGenLoading(true);
+    setFirstGenStatus("Menghasilkan kode backend (code.gs)... (Langkah 1/2)");
     try {
-      const initialMessages: { role: "user" | "assistant"; content: string }[] = [
+      // Langkah 1: Generate code.gs
+      const initialMessagesGs: { role: "user" | "assistant"; content: string }[] = [
         {
           role: "user",
-          content: `Buatkan kode lengkap code.gs dan index.html berdasarkan plan berikut:\n\n${prompt.outputMd}`,
+          content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}`,
         },
       ];
 
-      const { data: result, error: functionError } = await supabase.functions.invoke("chat", {
+      const gsRes = await supabase.functions.invoke("chat", {
         body: {
           appName: prompt.appName,
           appDescription: prompt.description,
           codeGs: "",
           codeHtml: "",
-          messages: initialMessages,
+          generateType: "gs",
+          messages: initialMessagesGs,
         },
       });
 
-      if (functionError || !result || !result.success) {
-        throw new Error(functionError?.message || result?.error || "Gagal men-generate kode.");
+      const gsResult = gsRes.data;
+      const gsError = gsRes.error;
+
+      if (gsError || !gsResult || !gsResult.success) {
+        throw new Error(gsError?.message || gsResult?.error || "Gagal men-generate kode backend (code.gs).");
       }
 
+      const generatedGs = gsResult.codeGs;
+
+      setFirstGenStatus("Menghasilkan kode frontend (index.html)... (Langkah 2/2)");
+
+      // Langkah 2: Generate index.html (skip quota increment)
+      const initialMessagesHtml: { role: "user" | "assistant"; content: string }[] = [
+        {
+          role: "user",
+          content: `Buatkan kode frontend (index.html) saja menyesuaikan kode backend berikut:\n\n${generatedGs}`,
+        },
+      ];
+
+      const htmlRes = await supabase.functions.invoke("chat", {
+        body: {
+          appName: prompt.appName,
+          appDescription: prompt.description,
+          codeGs: generatedGs,
+          codeHtml: "",
+          generateType: "html",
+          skipQuotaIncrement: true,
+          messages: initialMessagesHtml,
+        },
+      });
+
+      const htmlResult = htmlRes.data;
+      const htmlError = htmlRes.error;
+
+      if (htmlError || !htmlResult || !htmlResult.success) {
+        throw new Error(htmlError?.message || htmlResult?.error || "Gagal men-generate kode frontend (index.html).");
+      }
+
+      const generatedHtml = htmlResult.codeHtml;
+
       // Update workspace states
-      setEditedGs(result.codeGs);
-      setEditedHtml(result.codeHtml);
+      setEditedGs(generatedGs);
+      setEditedHtml(generatedHtml);
       setIsSaved(true);
 
       const assistantMessage = {
         role: "assistant" as const,
-        content: result.explanation || "Kode awal berhasil di-generate! Silakan periksa tab code.gs dan index.html di sebelah kiri.",
+        content: (gsResult.explanation || "") + "\n\n" + (htmlResult.explanation || "") + "\n\nKode awal berhasil di-generate! Silakan periksa tab code.gs dan index.html di sebelah kiri.",
       };
 
       // Tampilkan pesan awal yang bersih (tidak sepanjang markdown aslinya) di UI chat
@@ -198,12 +238,13 @@ export default function ResultPage() {
       setProfile(updatedProf);
 
       // Save to History
-      saveWorkspaceToHistory(result.codeGs, result.codeHtml, updatedChat);
+      saveWorkspaceToHistory(generatedGs, generatedHtml, updatedChat);
       setActiveTab("gs");
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
     } finally {
       setFirstGenLoading(false);
+      setFirstGenStatus("");
     }
   };
 
@@ -562,9 +603,9 @@ export default function ResultPage() {
                           {firstGenLoading ? (
                             <>
                               <div className="h-10 w-10 border-3 border-brand-500 border-t-transparent rounded-full animate-spin mb-4" />
-                              <p className="font-semibold text-brand-300 text-sm animate-pulse">Menghubungi AI Model...</p>
+                              <p className="font-semibold text-brand-300 text-sm animate-pulse">{firstGenStatus || "Menghubungi AI Model..."}</p>
                               <p className="text-[10px] text-surface-500 mt-1 max-w-xs leading-relaxed">
-                                AI sedang menganalisis plan.md dan menyusun kode backend (`code.gs`) beserta frontend (`index.html`) yang bebas error...
+                                Proses dipecah menjadi dua tahap (Backend lalu Frontend) agar berjalan lancar dan bebas dari timeout server.
                               </p>
                             </>
                           ) : (
