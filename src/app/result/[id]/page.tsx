@@ -523,6 +523,32 @@ export default function ResultPage() {
       return;
     }
 
+    const inputLower = chatInput.trim().toLowerCase();
+    const isLanjutkanKeyword = 
+      inputLower === "lanjutkan" || 
+      inputLower === "lanjut" || 
+      inputLower === "continue" || 
+      inputLower === "cont" || 
+      inputLower.startsWith("lanjutkan ") || 
+      inputLower.startsWith("lanjut ");
+
+    if (isLanjutkanKeyword) {
+      let targetType: "gs" | "html" = "gs";
+      if (inputLower.includes("html") || inputLower.includes("frontend")) {
+        targetType = "html";
+      } else if (inputLower.includes("gs") || inputLower.includes("backend")) {
+        targetType = "gs";
+      } else {
+        targetType = (activeTab === "gs" || activeTab === "html") 
+          ? activeTab 
+          : (truncatedType || "gs");
+      }
+      const userTyped = chatInput.trim();
+      setChatInput("");
+      await handleContinueGeneration(targetType, userTyped);
+      return;
+    }
+
     const userMsg = { role: "user" as const, content: chatInput };
     const nextMessages = [...chatMessages, userMsg];
     setChatMessages(nextMessages);
@@ -694,11 +720,15 @@ export default function ResultPage() {
   };
 
   // Continue truncated code generation and append it correctly
-  const handleContinueGeneration = async () => {
-    if (!prompt || !profile || !truncatedType) return;
+  const handleContinueGeneration = async (overrideType?: "gs" | "html", customUserMsgContent?: string) => {
+    const type = overrideType || truncatedType;
+    if (!prompt || !profile || !type) return;
 
-    const type = truncatedType;
+    const typeLabel = type === "gs" ? "code.gs" : "index.html";
+    const userMsgContent = customUserMsgContent || `✨ Lanjutkan ${typeLabel}`;
+
     setShowTruncationModal(false);
+    setChatLoading(true);
     setFirstGenLoading(true);
     setFirstGenStatus(`Melanjutkan penulisan kode ${type === "gs" ? "backend (code.gs)" : "frontend (index.html)"}...`);
 
@@ -733,6 +763,7 @@ export default function ResultPage() {
           codeHtml: type === "html" ? currentCode : "",
           generateType: type,
           isContinuation: true,
+          skipQuotaIncrement: true,
           messages: [
             {
               role: "user" as const,
@@ -758,7 +789,7 @@ export default function ResultPage() {
       let accumulatedText = "";
 
       // Add a chat bubble to inform the user
-      const userMsg = { role: "user" as const, content: `✨ Lanjutkan ${type === "gs" ? "code.gs" : "index.html"}` };
+      const userMsg = { role: "user" as const, content: userMsgContent };
       const assistantTempMsg = { role: "assistant" as const, content: "Melanjutkan penulisan..." };
       const updatedChat = [...chatMessages, userMsg, assistantTempMsg];
       setChatMessages(updatedChat);
@@ -860,6 +891,7 @@ export default function ResultPage() {
     } finally {
       setFirstGenLoading(false);
       setFirstGenStatus("");
+      setChatLoading(false);
     }
   };
 
@@ -1377,7 +1409,7 @@ export default function ResultPage() {
                 Batal
               </button>
               <button
-                onClick={handleContinueGeneration}
+                onClick={() => handleContinueGeneration()}
                 className="btn-primary flex-1 text-xs"
               >
                 Lanjutkan Penulisan
