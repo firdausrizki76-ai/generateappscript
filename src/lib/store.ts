@@ -485,7 +485,7 @@ export function getDefaultWizardData(): WizardData {
         name: "",
         icon: "ClipboardList",
         description: "",
-        crud: { create: true, read: true, update: true, delete: true },
+        crud: { create: false, read: false, update: false, delete: false },
         hasFilter: false,
         filterColumns: "",
         hasExport: false,

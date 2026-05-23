@@ -188,7 +188,7 @@ export default function GeneratePage() {
         name: newMenuName,
         icon: "ClipboardList",
         description: "Deskripsi menu baru",
-        crud: { create: true, read: true, update: true, delete: true },
+        crud: { create: false, read: false, update: false, delete: false },
         hasFilter: true,
         filterColumns: "",
         hasExport: false,
@@ -596,11 +596,14 @@ export default function GeneratePage() {
                           <button
                             key={op}
                             onClick={() => updateMenu(activeMenuIndex, { crud: { ...activeMenu.crud, [op]: !activeMenu.crud[op] } })}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-all flex items-center gap-1.5 ${
+                            className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all flex items-center gap-1.5 ${
                               activeMenu.crud[op]
-                                ? "bg-slate-100 text-slate-800"
-                                : "text-slate-400 hover:text-slate-600"
+                                ? "text-white shadow-sm scale-105"
+                                : "text-slate-400 hover:text-slate-700 hover:bg-slate-50"
                             }`}
+                            style={{
+                              backgroundColor: activeMenu.crud[op] ? activeColor : undefined,
+                            }}
                           >
                             {op === "create" && <Plus className="h-3 w-3" />}
                             {op === "read" && <Eye className="h-3 w-3" />}
