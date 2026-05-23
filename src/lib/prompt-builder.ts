@@ -46,6 +46,19 @@ export function buildPrompt(data: WizardData): string {
   // ── Sheets Structure
   ln(`## Google Sheets Structure`);
   ln();
+  if (data.hasLogin) {
+    ln(`### Sheet: \`Sheet_Users\``);
+    ln(`Digunakan untuk menyimpan data kredensial akun pengguna (Username, Password, dan Role).`);
+    ln();
+    ln(`| Kolom | Tipe | Wajib | Keterangan |`);
+    ln(`|-------|------|-------|------------|`);
+    ln(`| id | String (UUID) | Ya | Auto-generate |`);
+    ln(`| username | Teks | Ya | Username unik untuk login |`);
+    ln(`| password | Teks | Ya | Password (plain text) |`);
+    ln(`| role | Pilihan | Ya | Role pengguna: ${data.loginAccess || "Admin, User"} |`);
+    ln(`| nama_lengkap | Teks | Ya | Nama lengkap pengguna |`);
+    ln();
+  }
   for (const sheet of data.sheets) {
     ln(`### Sheet: \`${sheet.sheetName}\``);
     ln(`Terkait menu: **${sheet.menuName}**`);
@@ -58,7 +71,7 @@ export function buildPrompt(data: WizardData): string {
     }
     if (sheet.autoCreatedAt) ln(`| createdAt | Timestamp | Ya | Auto: tanggal dibuat |`);
     if (sheet.autoUpdatedAt) ln(`| updatedAt | Timestamp | Ya | Auto: tanggal diupdate |`);
-    if (sheet.autoCreatedBy) ln(`| createdBy | String | Ya | Auto: email user |`);
+    if (sheet.autoCreatedBy) ln(`| createdBy | String | Ya | Auto: username pembuat |`);
     ln();
   }
 
@@ -127,19 +140,25 @@ export function buildPrompt(data: WizardData): string {
 
   if (data.hasLogin) {
     ln(`### Mekanisme Halaman Login & Validasi Akses (Premium UI):`);
-    ln(`1. **Proses Verifikasi Awal:** Saat halaman pertama kali dibuka, frontend harus langsung memanggil server function \`checkUserAccess()\` secara asinkron.`);
-    ln(`2. **Shimmer / Loading Screen:** Selama proses pengecekan hak akses berlangsung, tampilkan layar pemuatan (loading screen) premium berskala penuh dengan animasi berdenyut (pulse) dan teks *"Memverifikasi identitas Anda..."*.`);
-    ln(`3. **Halaman Akses Ditolak (Restricted Access Page):**`);
-    ln(`   - Jika \`checkUserAccess()\` mengembalikan status tidak berizin (unauthorized):`);
-    ln(`     - Sembunyikan seluruh struktur layout menu dan aplikasi utama secara permanen.`);
-    ln(`     - Tampilkan sebuah kartu kaca (glassmorphism card) yang sangat menawan di tengah layar.`);
-    ln(`     - Tampilkan ikon gembok besar (\`bi-shield-lock-fill\`) dengan efek pendar neon warna tema.`);
-    ln(`     - Tampilkan judul *"Akses Ditolak / Terbatas"* dan keterangan bahwa akun Google aktif saat ini tidak terdaftar dalam whitelist.`);
-    ln(`     - Tampilkan email aktif pengguna saat ini dengan jelas: *"Email aktif Anda saat ini: **[email-user]**"*.`);
-    ln(`     - Tampilkan daftar email / domain yang diizinkan untuk masuk (jika diisi).`);
-    ln(`     - Sediakan tombol **"Ganti Akun Google"** yang mengarahkan user ke URL logout / pemilih akun Google Google Accounts: \`https://accounts.google.com/AccountChooser?continue=\` + Web App URL, sehingga mereka bisa login dengan akun lain yang diizinkan.`);
-    ln(`     - Sediakan tombol **"Minta Akses"** (mailto link ke admin atau petunjuk kontak) bagi pengguna baru.`);
-    ln(`4. **Masuk Aplikasi:** Jika pengguna lolos validasi, sembunyikan loading screen dengan efek transisi fade-out dan tampilkan dashboard utama.`);
+    ln(`1. **Form Login Premium Custom:**`);
+    ln(`   - Tampilkan Halaman Login minimalis bergaya glassmorphism di tengah layar jika pengguna belum login.`);
+    ln(`   - Sediakan input field untuk **Username** dan **Password**.`);
+    const rolesList = data.loginAccess ? data.loginAccess.split(",").map(r => r.trim()).filter(Boolean) : [];
+    if (rolesList.length > 0) {
+      ln(`   - Sediakan dropdown pilihan **Role** (Pilihan: ${rolesList.map(r => `"${r}"`).join(", ")}).`);
+    }
+    ln(`   - Tombol **"Masuk ke Aplikasi"** dengan visual loading spinner saat memverifikasi kredensial.`);
+    ln(`2. **Proses Verifikasi Kredensial (Server-Side):**`);
+    ln(`   - Ketika tombol login diklik, panggil server function \`loginUser(username, password, role)\`.`);
+    ln(`   - Fungsi backend akan mencari baris yang cocok di \`Sheet_Users\`.`);
+    ln(`   - Jika cocok, simpan status sesi login di client-side (menggunakan \`localStorage\` atau \`sessionStorage\` seperti \`sessionUser = { username, role, nama_lengkap }\`).`);
+    ln(`   - Sembunyikan form login and tampilkan dashboard utama aplikasi.`);
+    ln(`3. **Pembatasan Akses Menu Berdasarkan Role (Role-based Access Control):**`);
+    ln(`   - Navigasi menu utama harus mendeteksi role login pengguna.`);
+    ln(`   - Sembunyikan tab menu tertentu jika role pengguna aktif tidak diizinkan mengakses menu tersebut (misal: menu tertentu hanya bisa diakses oleh role tertentu).`);
+    ln(`4. **Tombol Keluar (Logout):**`);
+    ln(`   - Sediakan tombol Logout di pojok kanan atas atau sidebar.`);
+    ln(`   - Menghapus data session/localStorage pengguna dan memuat ulang halaman kembali ke form login.`);
     ln();
   }
 
@@ -153,7 +172,8 @@ export function buildPrompt(data: WizardData): string {
   ln(`function doGet() { /* serve HTML */ }`);
   ln(`function include(filename) { /* include partial HTML */ }`);
   if (data.hasLogin) {
-    ln(`function checkUserAccess() { /* cek hak akses email aktif, return { success: true/false, email: ... } */ }`);
+    ln(`function loginUser(username, password, role) { /* cari username, password, dan role yang cocok di Sheet_Users, return { success: true/false, user: { username, role, nama_lengkap } } */ }`);
+    ln(`function initUserTable() { /* otomatis buat Sheet_Users dengan default akun admin jika belum ada. Default: username "admin", password "admin123", role "Admin" */ }`);
   }
   ln();
   for (const sheet of data.sheets) {
@@ -200,19 +220,14 @@ export function buildPrompt(data: WizardData): string {
   ln(`## Security & Access`);
   ln();
   if (data.hasLogin) {
-    ln(`- **Akses Dibatasi (Otentikasi Server-Side & Whitelist):** Ya`);
-    ln(`- **Daftar Putih (Whitelist) Email / Domain yang Diizinkan:** \`${data.loginAccess || "Semua Akun Google (Tanpa domain khusus)"}\``);
+    ln(`- **Akses Dibatasi (Otentikasi Kredensial Spreadsheet & Role):** Ya`);
+    ln(`- **Daftar Role Pengguna yang Didukung:** \`${data.loginAccess || "Admin, User"}\``);
     ln(`- **Langkah Keamanan Wajib:**`);
-    ln(`  1. **Deteksi Email Server-Side:** Gunakan \`Session.getActiveUser().getEmail()\` untuk menangkap alamat email pengguna Google yang sedang aktif.`);
-    ln(`  2. **Validasi Whitelist:**`);
-    ln(`     - Bandingkan email aktif tersebut dengan daftar email/domain whitelist.`);
-    ln(`     - Domain whitelist dicocokkan dengan mengecek apakah email berakhiran dengan nama domain tersebut (misal: \`@perusahaan.com\`).`);
-    ln(`     - Lakukan pencocokan secara case-insensitive.`);
-    ln(`  3. **Keamanan Setiap Fungsi CRUD:** Setiap fungsi CRUD di backend (\`getData_\`, \`createData_\`, \`updateData_\`, \`deleteData_\`) wajib memanggil fungsi verifikasi akses terlebih dahulu sebelum berinteraksi dengan Google Sheet. Jika akses tidak valid, langsung throw error atau return status gagal: \`{ success: false, error: "Akses Ditolak" }\`. Ini sangat penting untuk mencegah pemanggilan ilegal via browser console.`);
-    ln(`  4. **Metode Deploy Web App (PENTING):** Tulis instruksi deploy agar pengguna mengatur konfigurasi deploy sebagai berikut:`);
+    ln(`  1. **Verifikasi Kredensial Server-Side:** Selalu validasi kecocokan username dan password langsung dari data baris \`Sheet_Users\` melalui Apps Script backend. Jangan pernah melakukan validasi password hardcoded di sisi HTML client-side.`);
+    ln(`  2. **Validasi Sesi pada Operasi CRUD:** Setiap fungsi CRUD di backend (\`getData_\`, \`createData_\`, dll) harus menerima parameter username/role aktif dan melakukan pengecekan ulang apakah user tersebut memiliki hak akses yang valid sebelum memproses data Sheets.`);
+    ln(`  3. **Metode Deploy Web App:** Tulis instruksi deploy agar pengguna mengatur konfigurasi deploy sebagai berikut:`);
     ln(`     - **Execute as:** \`Me\` (Saya)`);
-    ln(`     - **Who has access:** \`Anyone with Google account\` (Siapa saja dengan akun Google)`);
-    ln(`     - *Catatan: Jika dipilih 'Anyone' saja (tanpa Google account), email pengguna akan terdeteksi kosong/anonim di server-side, sehingga sistem pembatasan akses tidak dapat bekerja.*`);
+    ln(`     - **Who has access:** \`Anyone\` (Siapa saja, termasuk pengguna tanpa login Google, karena verifikasi sudah ditangani oleh sistem login form custom kita sendiri)`);
   } else {
     ln(`- **Akses:** Terbuka Bebas (Siapa saja dengan tautan dapat masuk)`);
     ln(`- **Metode Deploy Web App:**`);

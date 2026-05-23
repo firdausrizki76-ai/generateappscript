@@ -494,29 +494,29 @@ export default function GeneratePage() {
                       <Lock className="h-6 w-6" />
                     </div>
                     <div>
-                      <p className="font-semibold font-display text-white text-sm">Ya (Dengan Login)</p>
+                      <p className="font-semibold font-display text-white text-sm">Ya (Dengan Login Custom)</p>
                       <p className="text-xs text-surface-400 mt-1 leading-relaxed">
-                        Membatasi akses. Pengguna harus login menggunakan Google Account untuk menggunakan aplikasi.
+                        Membatasi akses. Pengguna harus memasukkan username & password yang divalidasi langsung dari Google Sheets.
                       </p>
                     </div>
                   </button>
                 </div>
 
-                {/* Optional Email domain allowed list input */}
+                {/* Optional Roles list input */}
                 {data.hasLogin && (
                   <div className="pt-2 animate-fade-up space-y-2">
                     <label className="block text-xs font-semibold text-brand-300 uppercase tracking-wide">
-                      Email / Domain yang Diizinkan (Opsional)
+                      Daftar Role Pengguna (Pisahkan dengan koma)
                     </label>
                     <input
                       type="text"
-                      placeholder="Contoh: admin@gmail.com, @perusahaan.com (kosongkan untuk mengizinkan semua akun Google)"
+                      placeholder="Contoh: Admin, Guru, Siswa (kosongkan jika tidak ada pembagian role)"
                       value={data.loginAccess}
                       onChange={(e) => updateData({ loginAccess: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition input-premium"
                     />
                     <p className="text-xs text-surface-500 leading-relaxed">
-                      Tulis daftar email lengkap atau domain khusus (awali dengan @). Pisahkan beberapa email/domain menggunakan koma. Jika dikosongkan, semua orang yang login dengan akun Google dapat masuk.
+                      Tulis daftar role/hak akses yang dibutuhkan untuk aplikasi ini. Sistem akan otomatis membuat kolom Role pada sheet database dan menyesuaikan tampilan menu berdasarkan role login pengguna.
                     </p>
                   </div>
                 )}
