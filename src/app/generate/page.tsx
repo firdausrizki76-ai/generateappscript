@@ -534,18 +534,20 @@ export default function GeneratePage() {
                       <button className="h-10 w-10 rounded-lg border border-slate-200 bg-white shadow-sm flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
                         {renderMenuIcon(activeMenu.icon, "h-5 w-5")}
                       </button>
-                      <div className="absolute right-0 top-12 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-2 hidden group-hover:grid grid-cols-4 gap-1 z-50">
-                         {menuIconOptions.map((item) => (
-                           <button
-                             key={item.name}
-                             onClick={() => updateMenu(activeMenuIndex, { icon: item.name })}
-                             className={`aspect-square rounded-lg flex items-center justify-center ${
-                               activeMenu.icon === item.name ? "bg-slate-100 ring-1 ring-slate-300 text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                             }`}
-                           >
-                             <item.component className="h-5 w-5" />
-                           </button>
-                         ))}
+                      <div className="absolute right-0 top-10 pt-2 w-64 z-50 hidden group-hover:block">
+                        <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-2 grid grid-cols-4 gap-1">
+                           {menuIconOptions.map((item) => (
+                             <button
+                               key={item.name}
+                               onClick={() => updateMenu(activeMenuIndex, { icon: item.name })}
+                               className={`aspect-square rounded-lg flex items-center justify-center ${
+                                 activeMenu.icon === item.name ? "bg-slate-100 ring-1 ring-slate-300 text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                               }`}
+                             >
+                               <item.component className="h-5 w-5" />
+                             </button>
+                           ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -583,103 +585,122 @@ export default function GeneratePage() {
                       <span className="font-medium">Struktur Kolom Data</span>
                     </div>
                     
-                    <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm gap-1">
-                      {(["create", "read", "update", "delete"] as const).map((op) => (
-                        <button
-                          key={op}
-                          onClick={() => updateMenu(activeMenuIndex, { crud: { ...activeMenu.crud, [op]: !activeMenu.crud[op] } })}
-                          className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-all flex items-center gap-1.5 ${
-                            activeMenu.crud[op]
-                              ? "bg-slate-100 text-slate-800"
-                              : "text-slate-400 hover:text-slate-600"
-                          }`}
-                        >
-                          {op === "create" && <Plus className="h-3 w-3" />}
-                          {op === "read" && <Eye className="h-3 w-3" />}
-                          {op === "update" && <RefreshCw className="h-3 w-3" />}
-                          {op === "delete" && <Trash2 className="h-3 w-3" />}
-                          {op}
-                        </button>
-                      ))}
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tracking-wide">
+                        * Izin Akses (Create=Tambah, Read=Lihat, Update=Edit, Delete=Hapus)
+                      </div>
+                      <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm gap-1">
+                        {(["create", "read", "update", "delete"] as const).map((op) => (
+                          <button
+                            key={op}
+                            onClick={() => updateMenu(activeMenuIndex, { crud: { ...activeMenu.crud, [op]: !activeMenu.crud[op] } })}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-all flex items-center gap-1.5 ${
+                              activeMenu.crud[op]
+                                ? "bg-slate-100 text-slate-800"
+                                : "text-slate-400 hover:text-slate-600"
+                            }`}
+                          >
+                            {op === "create" && <Plus className="h-3 w-3" />}
+                            {op === "read" && <Eye className="h-3 w-3" />}
+                            {op === "update" && <RefreshCw className="h-3 w-3" />}
+                            {op === "delete" && <Trash2 className="h-3 w-3" />}
+                            {op}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
                   {activeSheet ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm whitespace-nowrap">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium">
-                          <tr>
-                            <th className="px-4 py-3 w-10">No</th>
-                            <th className="px-4 py-3">Nama Kolom</th>
-                            <th className="px-4 py-3 w-32">Tipe Data</th>
-                            <th className="px-4 py-3 w-24 text-center">Wajib?</th>
-                            <th className="px-4 py-3 w-16"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {/* Auto Columns Preview */}
-                          {activeSheet.autoCreatedAt && (
-                            <tr className="bg-slate-50/50 opacity-60">
-                              <td className="px-4 py-3 text-center">-</td>
-                              <td className="px-4 py-3"><span className="flex items-center gap-2"><Lock className="h-3 w-3"/> createdAt (Otomatis)</span></td>
-                              <td className="px-4 py-3">Tanggal</td>
-                              <td className="px-4 py-3 text-center"><Check className="h-4 w-4 mx-auto text-slate-400" /></td>
-                              <td className="px-4 py-3"></td>
-                            </tr>
-                          )}
-                          {/* Editable Columns */}
-                          {activeSheet.columns.map((col, cIdx) => (
-                            <tr key={cIdx} className="group hover:bg-slate-50 transition-colors">
-                              <td className="px-4 py-3 text-slate-400 text-center">{cIdx + 1}</td>
-                              <td className="px-4 py-3">
-                                <input
-                                  type="text"
-                                  value={col.name}
-                                  onChange={(e) => updateColumn(activeSheetIndex, cIdx, { name: e.target.value })}
-                                  placeholder="Nama Kolom"
-                                  className="w-full bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:border-slate-400 focus:outline-none transition-colors py-1"
-                                />
-                              </td>
-                              <td className="px-4 py-3">
-                                <select
-                                  value={col.type}
-                                  onChange={(e) => updateColumn(activeSheetIndex, cIdx, { type: e.target.value })}
-                                  className="w-full bg-transparent border-none text-slate-600 focus:ring-0 focus:outline-none cursor-pointer"
-                                >
-                                  {dataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                                </select>
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <button
-                                  onClick={() => updateColumn(activeSheetIndex, cIdx, { required: !col.required })}
-                                  className={`h-5 w-5 rounded border flex items-center justify-center mx-auto transition-colors ${
-                                    col.required ? "bg-slate-800 border-slate-800 text-white" : "border-slate-300 text-transparent"
-                                  }`}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <button
-                                  onClick={() => removeColumn(activeSheetIndex, cIdx)}
-                                  disabled={activeSheet.columns.length <= 1}
-                                  className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-0"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div className="p-4 border-t border-slate-100">
-                        <button
+                    <div className="p-4 bg-slate-50/50">
+                      <div className="flex overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm pb-1 custom-scrollbar">
+                        {/* Auto Columns Preview */}
+                        {activeSheet.autoCreatedAt && (
+                          <div className="shrink-0 w-44 border-r border-slate-200 bg-slate-50/70 select-none">
+                            <div className="p-3 border-b border-slate-200 font-semibold text-sm flex items-center gap-1.5 text-slate-500 bg-slate-100/50">
+                              <Lock className="h-3.5 w-3.5 text-slate-400"/> createdAt
+                            </div>
+                            <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                              <span>Tipe:</span> <span>Tanggal</span>
+                            </div>
+                            <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                              <span>Wajib:</span> <Check className="h-3 w-3" />
+                            </div>
+                            <div className="p-3 text-xs text-slate-300 italic border-b border-slate-50 bg-white">
+                              Data otomatis...
+                            </div>
+                            <div className="p-3 text-xs text-slate-300 italic bg-white">
+                              Data otomatis...
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Editable Columns */}
+                        {activeSheet.columns.map((col, cIdx) => (
+                          <div key={cIdx} className="shrink-0 w-56 border-r border-slate-200 relative group flex flex-col transition-colors hover:border-slate-300 focus-within:border-brand-300">
+                            {/* Header: Nama Kolom */}
+                            <div className="p-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between group-hover:bg-slate-100 transition-colors">
+                              <input
+                                type="text"
+                                value={col.name}
+                                onChange={(e) => updateColumn(activeSheetIndex, cIdx, { name: e.target.value })}
+                                className="w-full bg-transparent font-semibold text-sm border-none focus:ring-0 p-1 placeholder-slate-400"
+                                placeholder="Nama Kolom"
+                              />
+                              <button 
+                                onClick={() => removeColumn(activeSheetIndex, cIdx)} 
+                                disabled={activeSheet.columns.length <= 1}
+                                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors disabled:opacity-0"
+                              >
+                                <Trash2 className="h-3.5 w-3.5"/>
+                              </button>
+                            </div>
+                            
+                            {/* Tipe Data */}
+                            <div className="px-2 py-1.5 border-b border-slate-100 flex items-center justify-between">
+                              <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold px-1">Tipe</label>
+                              <select
+                                value={col.type}
+                                onChange={(e) => updateColumn(activeSheetIndex, cIdx, { type: e.target.value })}
+                                className="text-xs font-medium bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 text-slate-700 cursor-pointer text-right hover:bg-slate-50 rounded"
+                              >
+                                {dataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                            
+                            {/* Wajib Diisi */}
+                            <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                                 onClick={() => updateColumn(activeSheetIndex, cIdx, { required: !col.required })}>
+                              <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold cursor-pointer">Wajib Isi</label>
+                              <div className={`h-4 w-4 rounded flex items-center justify-center transition-colors border ${
+                                col.required ? "bg-slate-800 border-slate-800 text-white" : "border-slate-300 text-transparent"
+                              }`}>
+                                <Check className="h-3 w-3" />
+                              </div>
+                            </div>
+                            
+                            {/* Mock Data Rows */}
+                            <div className="p-3 text-xs text-slate-300 italic border-b border-slate-50 bg-white flex-1 flex items-center">
+                              Contoh isi data...
+                            </div>
+                            <div className="p-3 text-xs text-slate-300 italic bg-white flex-1 flex items-center">
+                              Contoh isi data...
+                            </div>
+                          </div>
+                        ))}
+                        
+                        {/* Add Column Button */}
+                        <div 
+                          className="shrink-0 w-32 bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer group" 
                           onClick={() => addColumn(activeSheetIndex)}
-                          className="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-2 py-1 transition-colors"
-                          style={{ color: activeColor }}
                         >
-                          <Plus className="h-4 w-4" /> Tambah Kolom
-                        </button>
+                          <div className="text-center flex flex-col items-center gap-2 transition-transform group-hover:scale-105" style={{ color: activeColor }}>
+                            <div className="h-10 w-10 rounded-full bg-white shadow-sm border border-slate-200 flex items-center justify-center text-inherit">
+                              <Plus className="h-5 w-5" />
+                            </div>
+                            <span className="text-xs font-semibold text-slate-500 group-hover:text-slate-700">Tambah Kolom</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ) : (
