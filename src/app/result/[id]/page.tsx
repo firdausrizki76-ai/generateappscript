@@ -53,6 +53,15 @@ const parseTaggedContent = (text: string) => {
   let codeHtml = "";
 
   const cleanLeading = (str: string) => str.replace(/^\s+/, "");
+  
+  const cleanCodeFences = (str: string) => {
+    let cleaned = str.trim();
+    // Remove leading ```javascript or ```html or ``` (case-insensitive)
+    cleaned = cleaned.replace(/^```(?:javascript|html|gs)?\s*\n/i, "");
+    // Remove trailing ```
+    cleaned = cleaned.replace(/\n```\s*$/, "");
+    return cleaned;
+  };
 
   if (hasExplanation) {
     explanation = cleanLeading(extractTag("[EXPLANATION]", "[/EXPLANATION]"));
@@ -66,10 +75,10 @@ const parseTaggedContent = (text: string) => {
   }
 
   if (hasGs) {
-    codeGs = cleanLeading(extractTag("[CODE_GS]", "[/CODE_GS]"));
+    codeGs = cleanCodeFences(cleanLeading(extractTag("[CODE_GS]", "[/CODE_GS]")));
   }
   if (hasHtml) {
-    codeHtml = cleanLeading(extractTag("[CODE_HTML]", "[/CODE_HTML]"));
+    codeHtml = cleanCodeFences(cleanLeading(extractTag("[CODE_HTML]", "[/CODE_HTML]")));
   }
 
   return { explanation, codeGs, codeHtml };
