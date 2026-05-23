@@ -264,7 +264,15 @@ export default function ResultPage() {
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(errText || "Gagal memproses streaming backend.");
+        let errMsg = errText;
+        try { 
+          const errObj = JSON.parse(errText); 
+          if (errObj.error) errMsg = errObj.error; 
+        } catch(e) {}
+        if (errMsg.includes("429") || errMsg.includes("rate limited") || errMsg.includes("busy")) {
+          errMsg = "Model AI (DeepSeek) saat ini sedang sangat sibuk atau server sedang penuh. Silakan tunggu beberapa saat lalu coba lagi.";
+        }
+        throw new Error(errMsg || "Gagal memproses streaming backend.");
       }
 
       const reader = response.body?.getReader();
@@ -418,7 +426,15 @@ export default function ResultPage() {
 
       if (!responseHtml.ok) {
         const errText = await responseHtml.text();
-        throw new Error(errText || "Gagal memproses streaming frontend.");
+        let errMsg = errText;
+        try { 
+          const errObj = JSON.parse(errText); 
+          if (errObj.error) errMsg = errObj.error; 
+        } catch(e) {}
+        if (errMsg.includes("429") || errMsg.includes("rate limited") || errMsg.includes("busy")) {
+          errMsg = "Model AI (DeepSeek) saat ini sedang sangat sibuk atau server sedang penuh. Silakan tunggu beberapa saat lalu coba lagi.";
+        }
+        throw new Error(errMsg || "Gagal memproses streaming frontend.");
       }
 
       const readerHtml = responseHtml.body?.getReader();
@@ -599,7 +615,15 @@ export default function ResultPage() {
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(errText || "Gagal memproses streaming revisi.");
+        let errMsg = errText;
+        try { 
+          const errObj = JSON.parse(errText); 
+          if (errObj.error) errMsg = errObj.error; 
+        } catch(e) {}
+        if (errMsg.includes("429") || errMsg.includes("rate limited") || errMsg.includes("busy")) {
+          errMsg = "Model AI (DeepSeek) saat ini sedang sangat sibuk atau server sedang penuh. Silakan tunggu beberapa saat lalu coba lagi.";
+        }
+        throw new Error(errMsg || "Gagal memproses streaming revisi.");
       }
 
       const reader = response.body?.getReader();
@@ -784,7 +808,15 @@ export default function ResultPage() {
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(errText || "Gagal melanjutkan streaming.");
+        let errMsg = errText;
+        try { 
+          const errObj = JSON.parse(errText); 
+          if (errObj.error) errMsg = errObj.error; 
+        } catch(e) {}
+        if (errMsg.includes("429") || errMsg.includes("rate limited") || errMsg.includes("busy")) {
+          errMsg = "Model AI (DeepSeek) saat ini sedang sangat sibuk atau server sedang penuh. Silakan tunggu beberapa saat lalu coba lagi.";
+        }
+        throw new Error(errMsg || "Gagal melanjutkan streaming.");
       }
 
       const reader = response.body?.getReader();
