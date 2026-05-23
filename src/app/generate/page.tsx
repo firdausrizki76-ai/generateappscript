@@ -122,6 +122,7 @@ export default function GeneratePage() {
   const [activeMenuIndex, setActiveMenuIndex] = useState<number>(0);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
+  const [showCrudHelp, setShowCrudHelp] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -586,8 +587,9 @@ export default function GeneratePage() {
                     </div>
                     
                     <div className="flex flex-col items-end gap-1.5">
-                      <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tracking-wide">
-                        * Izin Akses (Create=Tambah, Read=Lihat, Update=Edit, Delete=Hapus)
+                      <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tracking-wide flex items-center gap-1.5">
+                        <span>* Izin Akses (Create, Read, Update, Delete)</span>
+                        <button onClick={() => setShowCrudHelp(true)} className="h-4 w-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center hover:bg-brand-100 hover:text-brand-600 transition-colors" title="Penjelasan CRUD">?</button>
                       </div>
                       <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm gap-1">
                         {(["create", "read", "update", "delete"] as const).map((op) => (
@@ -704,10 +706,36 @@ export default function GeneratePage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center">
-                      <Database className="h-12 w-12 text-slate-200 mb-3" />
-                      <p>Menu ini tidak memiliki form input atau data sheet.</p>
-                      <p className="text-sm mt-1">Aktifkan operasi Create/Update/Delete untuk memunculkan konfigurasi tabel.</p>
+                    <div className="p-6 bg-slate-50/50 flex-1 flex flex-col justify-center">
+                      <div className="max-w-md mx-auto w-full text-center mb-8">
+                        <h3 className="text-lg font-bold text-slate-700 font-display mb-2">Tampilan Dashboard / Statis</h3>
+                        <p className="text-sm text-slate-500 leading-relaxed">
+                          Karena menu ini tidak memiliki izin operasi <b>Create/Update/Delete</b>, tampilan akhirnya akan dirancang sebagai halaman informasi (Dashboard) yang bisa berisi bagan, grafik, atau rangkuman data.
+                        </p>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto w-full opacity-60 hover:opacity-100 transition-opacity duration-300">
+                        {/* Mock Chart Box */}
+                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col items-center justify-center h-32 gap-3 hover:shadow-md transition-shadow">
+                          <BarChart3 className="h-8 w-8 text-indigo-400" />
+                          <div className="h-2 w-16 bg-slate-200 rounded-full"></div>
+                        </div>
+                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col items-center justify-center h-32 gap-3 hover:shadow-md transition-shadow">
+                          <TrendingUp className="h-8 w-8 text-emerald-400" />
+                          <div className="h-2 w-20 bg-slate-200 rounded-full"></div>
+                        </div>
+                        {/* Mock Large Chart */}
+                        <div className="col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm h-48 flex flex-col gap-4 hover:shadow-md transition-shadow">
+                          <div className="h-3 w-32 bg-slate-200 rounded-full"></div>
+                          <div className="flex-1 flex items-end justify-between gap-3 px-4">
+                            <div className="w-full bg-blue-100/80 rounded-t-lg h-[40%]"></div>
+                            <div className="w-full bg-blue-200/80 rounded-t-lg h-[70%]"></div>
+                            <div className="w-full bg-blue-300/80 rounded-t-lg h-[50%]"></div>
+                            <div className="w-full bg-blue-400/80 rounded-t-lg h-[90%]"></div>
+                            <div className="w-full bg-blue-500/80 rounded-t-lg h-[60%]"></div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -869,6 +897,39 @@ export default function GeneratePage() {
                 Upgrade Paket
               </a>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CRUD Help Modal ─── */}
+      {showCrudHelp && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-fade-up relative">
+            <button onClick={() => setShowCrudHelp(false)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition-colors"><X className="h-5 w-5"/></button>
+            <h3 className="text-lg font-bold text-slate-800 mb-2 font-display">Izin Akses Data (CRUD)</h3>
+            <p className="text-sm text-slate-600 mb-5 leading-relaxed">CRUD adalah kepanjangan dari standar opsi pengelolaan data di dalam aplikasi. Tentukan apa saja yang pengguna bisa lakukan di menu ini:</p>
+            <ul className="space-y-4 text-sm text-slate-600">
+              <li className="flex gap-3">
+                <div className="font-bold text-brand-600 min-w-[55px] pt-0.5">Create</div> 
+                <span>Memungkinkan pengguna untuk menambahkan data baru ke dalam database.</span>
+              </li>
+              <li className="flex gap-3">
+                <div className="font-bold text-brand-600 min-w-[55px] pt-0.5">Read</div> 
+                <span>Menampilkan daftar atau tabel data untuk dilihat dan dibaca.</span>
+              </li>
+              <li className="flex gap-3">
+                <div className="font-bold text-brand-600 min-w-[55px] pt-0.5">Update</div> 
+                <span>Mengizinkan pengguna mengubah atau mengedit data yang sudah ada.</span>
+              </li>
+              <li className="flex gap-3">
+                <div className="font-bold text-brand-600 min-w-[55px] pt-0.5">Delete</div> 
+                <span>Mengizinkan pengguna menghapus data secara permanen.</span>
+              </li>
+            </ul>
+            <div className="mt-5 p-3 bg-blue-50 text-blue-700 rounded-lg text-xs leading-relaxed border border-blue-100">
+              <span className="font-semibold">💡 Tips:</span> Jika Anda menonaktifkan <b>Create, Update, dan Delete</b>, menu tersebut otomatis akan dianggap sebagai <b>Dashboard</b> atau Halaman Statis.
+            </div>
+            <button onClick={() => setShowCrudHelp(false)} className="mt-6 w-full py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-colors">Saya Mengerti</button>
           </div>
         </div>
       )}
