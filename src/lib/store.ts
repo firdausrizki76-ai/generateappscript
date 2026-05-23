@@ -25,7 +25,7 @@ export interface PromptHistory {
   inputData: WizardData;
   codeGs?: string;
   codeHtml?: string;
-  chatHistory?: { role: "user" | "assistant"; content: string }[];
+  chatHistory?: { role: "user" | "assistant"; content: string; reasoning?: string }[];
 }
 
 export interface MenuItem {
@@ -342,7 +342,7 @@ export async function updatePromptCodeAndChat(
   id: string,
   codeGs: string,
   codeHtml: string,
-  chatHistory: { role: "user" | "assistant"; content: string }[]
+  chatHistory: { role: "user" | "assistant"; content: string; reasoning?: string }[]
 ): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();

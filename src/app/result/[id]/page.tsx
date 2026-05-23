@@ -115,7 +115,7 @@ export default function ResultPage() {
   const [isSaved, setIsSaved] = useState(true);
 
   // Chat states
-  const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; content: string; reasoning?: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [firstGenLoading, setFirstGenLoading] = useState(false);
@@ -284,6 +284,7 @@ export default function ResultPage() {
       let done = false;
       let buffer = "";
       let accumulatedText = "";
+      let accumulatedReasoning = "";
 
       while (!done) {
         const { value, done: doneReading } = await reader.read();
@@ -297,31 +298,41 @@ export default function ResultPage() {
             const trimmed = line.trim();
             if (!trimmed || trimmed === "data: [DONE]") continue;
             if (trimmed.startsWith("data: ")) {
+              let parsed;
               try {
-                const parsed = JSON.parse(trimmed.slice(6));
-                const content = parsed.choices?.[0]?.delta?.content || "";
-                accumulatedText += content;
-
-                const parsedContent = parseTaggedContent(accumulatedText);
-
-                if (parsedContent.codeGs) {
-                  setEditedGs(parsedContent.codeGs);
-                }
-
-                const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
-                setChatMessages((prev) => {
-                  const next = [...prev];
-                  if (next.length > 0) {
-                    next[next.length - 1] = {
-                      role: "assistant",
-                      content: bubbleContent || "Membuat backend...",
-                    };
-                  }
-                  return next;
-                });
+                parsed = JSON.parse(trimmed.slice(6));
               } catch (e) {
-                // Ignore partial JSON parse errors
+                continue;
               }
+
+              if (parsed.error) {
+                const errMsg = parsed.error.message || JSON.stringify(parsed.error);
+                throw new Error(errMsg);
+              }
+
+              const content = parsed.choices?.[0]?.delta?.content || "";
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning || parsed.choices?.[0]?.delta?.reasoning_content || "";
+              accumulatedText += content;
+              accumulatedReasoning += reasoning;
+
+              const parsedContent = parseTaggedContent(accumulatedText);
+
+              if (parsedContent.codeGs) {
+                setEditedGs(parsedContent.codeGs);
+              }
+
+              const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
+              setChatMessages((prev) => {
+                const next = [...prev];
+                if (next.length > 0) {
+                  next[next.length - 1] = {
+                    role: "assistant",
+                    content: bubbleContent || (accumulatedReasoning ? "" : "Membuat backend..."),
+                    reasoning: accumulatedReasoning || undefined,
+                  };
+                }
+                return next;
+              });
             }
           }
         }
@@ -334,6 +345,7 @@ export default function ResultPage() {
       const gsAssistantMessage = {
         role: "assistant" as const,
         content: (finalParsed.explanation || "") + "\n\n✓ Kode backend (code.gs) berhasil dibuat. Silakan periksa tab editor di sebelah kiri.",
+        reasoning: accumulatedReasoning || undefined,
       };
 
       const finalChat = [
@@ -446,6 +458,7 @@ export default function ResultPage() {
       let doneHtml = false;
       let bufferHtml = "";
       let accumulatedTextHtml = "";
+      let accumulatedReasoningHtml = "";
 
       while (!doneHtml) {
         const { value, done: doneReading } = await readerHtml.read();
@@ -459,31 +472,41 @@ export default function ResultPage() {
             const trimmed = line.trim();
             if (!trimmed || trimmed === "data: [DONE]") continue;
             if (trimmed.startsWith("data: ")) {
+              let parsed;
               try {
-                const parsed = JSON.parse(trimmed.slice(6));
-                const content = parsed.choices?.[0]?.delta?.content || "";
-                accumulatedTextHtml += content;
-
-                const parsedContent = parseTaggedContent(accumulatedTextHtml);
-
-                if (parsedContent.codeHtml) {
-                  setEditedHtml(parsedContent.codeHtml);
-                }
-
-                const bubbleContent = getBubbleContent(accumulatedTextHtml, parsedContent);
-                setChatMessages((prev) => {
-                  const next = [...prev];
-                  if (next.length > 0) {
-                    next[next.length - 1] = {
-                      role: "assistant",
-                      content: bubbleContent || "Membuat frontend...",
-                    };
-                  }
-                  return next;
-                });
+                parsed = JSON.parse(trimmed.slice(6));
               } catch (e) {
-                // Ignore partial JSON parsing errors
+                continue;
               }
+
+              if (parsed.error) {
+                const errMsg = parsed.error.message || JSON.stringify(parsed.error);
+                throw new Error(errMsg);
+              }
+
+              const content = parsed.choices?.[0]?.delta?.content || "";
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning || parsed.choices?.[0]?.delta?.reasoning_content || "";
+              accumulatedTextHtml += content;
+              accumulatedReasoningHtml += reasoning;
+
+              const parsedContent = parseTaggedContent(accumulatedTextHtml);
+
+              if (parsedContent.codeHtml) {
+                setEditedHtml(parsedContent.codeHtml);
+              }
+
+              const bubbleContent = getBubbleContent(accumulatedTextHtml, parsedContent);
+              setChatMessages((prev) => {
+                const next = [...prev];
+                if (next.length > 0) {
+                  next[next.length - 1] = {
+                    role: "assistant",
+                    content: bubbleContent || (accumulatedReasoningHtml ? "" : "Membuat frontend..."),
+                    reasoning: accumulatedReasoningHtml || undefined,
+                  };
+                }
+                return next;
+              });
             }
           }
         }
@@ -497,6 +520,7 @@ export default function ResultPage() {
       const htmlAssistantMessage = {
         role: "assistant" as const,
         content: (finalParsedHtml.explanation || "") + "\n\n✓ Kode frontend (index.html) berhasil dibuat! Silakan periksa tab editor di sebelah kiri.",
+        reasoning: accumulatedReasoningHtml || undefined,
       };
 
       const finalChat = [
@@ -635,6 +659,7 @@ export default function ResultPage() {
       let done = false;
       let buffer = "";
       let accumulatedText = "";
+      let accumulatedReasoning = "";
       let autoSwitchedGs = false;
       let autoSwitchedHtml = false;
 
@@ -650,42 +675,52 @@ export default function ResultPage() {
             const trimmed = line.trim();
             if (!trimmed || trimmed === "data: [DONE]") continue;
             if (trimmed.startsWith("data: ")) {
+              let parsed;
               try {
-                const parsed = JSON.parse(trimmed.slice(6));
-                const content = parsed.choices?.[0]?.delta?.content || "";
-                accumulatedText += content;
-
-                const parsedContent = parseTaggedContent(accumulatedText);
-
-                if (accumulatedText.includes("[CODE_GS]")) {
-                  setEditedGs(parsedContent.codeGs);
-                  if (!autoSwitchedGs) {
-                    autoSwitchedGs = true;
-                    setActiveTab("gs");
-                  }
-                }
-                if (accumulatedText.includes("[CODE_HTML]")) {
-                  setEditedHtml(parsedContent.codeHtml);
-                  if (!autoSwitchedHtml) {
-                    autoSwitchedHtml = true;
-                    setActiveTab("html");
-                  }
-                }
-
-                const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
-                setChatMessages((prev) => {
-                  const next = [...prev];
-                  if (next.length > 0) {
-                    next[next.length - 1] = {
-                      role: "assistant",
-                      content: bubbleContent || "Berpikir...",
-                    };
-                  }
-                  return next;
-                });
+                parsed = JSON.parse(trimmed.slice(6));
               } catch (e) {
-                // Ignore partial JSON parsing errors
+                continue;
               }
+
+              if (parsed.error) {
+                const errMsg = parsed.error.message || JSON.stringify(parsed.error);
+                throw new Error(errMsg);
+              }
+
+              const content = parsed.choices?.[0]?.delta?.content || "";
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning || parsed.choices?.[0]?.delta?.reasoning_content || "";
+              accumulatedText += content;
+              accumulatedReasoning += reasoning;
+
+              const parsedContent = parseTaggedContent(accumulatedText);
+
+              if (accumulatedText.includes("[CODE_GS]")) {
+                setEditedGs(parsedContent.codeGs);
+                if (!autoSwitchedGs) {
+                  autoSwitchedGs = true;
+                  setActiveTab("gs");
+                }
+              }
+              if (accumulatedText.includes("[CODE_HTML]")) {
+                setEditedHtml(parsedContent.codeHtml);
+                if (!autoSwitchedHtml) {
+                  autoSwitchedHtml = true;
+                  setActiveTab("html");
+                }
+              }
+
+              const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
+              setChatMessages((prev) => {
+                const next = [...prev];
+                if (next.length > 0) {
+                  next[next.length - 1] = {
+                    role: "assistant",
+                    content: bubbleContent || (accumulatedReasoning ? "" : "Berpikir..."),
+                    reasoning: accumulatedReasoning || undefined,
+                  };
+                }
+                return next;
+              });
             }
           }
         }
@@ -709,6 +744,7 @@ export default function ResultPage() {
       const assistantMsg = {
         role: "assistant" as const,
         content: finalParsed.explanation || accumulatedText,
+        reasoning: accumulatedReasoning || undefined,
       };
 
       const finalMessages = [...nextMessages, assistantMsg];
@@ -828,6 +864,7 @@ export default function ResultPage() {
       let done = false;
       let buffer = "";
       let accumulatedText = "";
+      let accumulatedReasoning = "";
 
       // Add a chat bubble to inform the user
       const userMsg = { role: "user" as const, content: userMsgContent };
@@ -847,33 +884,43 @@ export default function ResultPage() {
             const trimmed = line.trim();
             if (!trimmed || trimmed === "data: [DONE]") continue;
             if (trimmed.startsWith("data: ")) {
+              let parsed;
               try {
-                const parsed = JSON.parse(trimmed.slice(6));
-                const content = parsed.choices?.[0]?.delta?.content || "";
-                accumulatedText += content;
-
-                const parsedContent = parseTaggedContent(accumulatedText);
-
-                if (type === "gs" && parsedContent.codeGs) {
-                  setEditedGs(baseCode + parsedContent.codeGs);
-                } else if (type === "html" && parsedContent.codeHtml) {
-                  setEditedHtml(baseCode + parsedContent.codeHtml);
-                }
-
-                const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
-                setChatMessages((prev) => {
-                  const next = [...prev];
-                  if (next.length > 0) {
-                    next[next.length - 1] = {
-                      role: "assistant",
-                      content: bubbleContent || "Melanjutkan penulisan...",
-                    };
-                  }
-                  return next;
-                });
+                parsed = JSON.parse(trimmed.slice(6));
               } catch (e) {
-                // Ignore partial JSON parse errors
+                continue;
               }
+
+              if (parsed.error) {
+                const errMsg = parsed.error.message || JSON.stringify(parsed.error);
+                throw new Error(errMsg);
+              }
+
+              const content = parsed.choices?.[0]?.delta?.content || "";
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning || parsed.choices?.[0]?.delta?.reasoning_content || "";
+              accumulatedText += content;
+              accumulatedReasoning += reasoning;
+
+              const parsedContent = parseTaggedContent(accumulatedText);
+
+              if (type === "gs" && parsedContent.codeGs) {
+                setEditedGs(baseCode + parsedContent.codeGs);
+              } else if (type === "html" && parsedContent.codeHtml) {
+                setEditedHtml(baseCode + parsedContent.codeHtml);
+              }
+
+              const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
+              setChatMessages((prev) => {
+                const next = [...prev];
+                if (next.length > 0) {
+                  next[next.length - 1] = {
+                    role: "assistant",
+                    content: bubbleContent || (accumulatedReasoning ? "" : "Melanjutkan penulisan..."),
+                    reasoning: accumulatedReasoning || undefined,
+                  };
+                }
+                return next;
+              });
             }
           }
         }
@@ -893,6 +940,7 @@ export default function ResultPage() {
       const assistantMessage = {
         role: "assistant" as const,
         content: (finalParsed.explanation || "") + `\n\n✓ Kode ${type === "gs" ? "backend (code.gs)" : "frontend (index.html)"} berhasil dilanjutkan dan digabungkan!`,
+        reasoning: accumulatedReasoning || undefined,
       };
 
       const finalChat = [...chatMessages, userMsg, assistantMessage];
@@ -1345,6 +1393,17 @@ export default function ResultPage() {
                             : "bg-surface-850 border border-surface-800 text-surface-200 rounded-tl-none select-text"
                         }`}
                       >
+                        {!isUser && msg.reasoning && (
+                          <details className="mb-3 bg-surface-900/50 border border-surface-800 rounded-xl p-2.5 text-surface-400 text-[11px]" open>
+                            <summary className="cursor-pointer font-bold text-brand-400 hover:text-brand-300 select-none flex items-center gap-1.5">
+                              <Sparkles className="h-3 w-3 animate-pulse text-brand-400" />
+                              <span>Proses Berpikir (Thinking Process)</span>
+                            </summary>
+                            <div className="mt-2 pl-2 border-l-2 border-surface-700 font-mono text-[10px] text-surface-300 leading-relaxed whitespace-pre-wrap select-text">
+                              {msg.reasoning}
+                            </div>
+                          </details>
+                        )}
                         {displayContent}
                       </div>
                     </div>
