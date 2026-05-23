@@ -115,6 +115,7 @@ export default function ResultPage() {
   // Quota modal warning
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showTruncationModal, setShowTruncationModal] = useState(false);
+  const [truncatedType, setTruncatedType] = useState<"gs" | "html" | null>(null);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -335,7 +336,10 @@ export default function ResultPage() {
       // Check truncation
       const isTruncated = accumulatedText.includes("[CODE_GS]") && !accumulatedText.includes("[/CODE_GS]");
       if (isTruncated) {
+        setTruncatedType("gs");
         setShowTruncationModal(true);
+      } else {
+        setTruncatedType(null);
       }
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
@@ -483,7 +487,10 @@ export default function ResultPage() {
       // Check truncation
       const isTruncated = accumulatedTextHtml.includes("[CODE_HTML]") && !accumulatedTextHtml.includes("[/CODE_HTML]");
       if (isTruncated) {
+        setTruncatedType("html");
         setShowTruncationModal(true);
+      } else {
+        setTruncatedType(null);
       }
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
@@ -656,15 +663,16 @@ export default function ResultPage() {
       await saveWorkspaceToHistory(nextGs, nextHtml, finalMessages);
 
       // Check truncation
-      let isTruncated = false;
-      if (accumulatedText.includes("[CODE_GS]") && !accumulatedText.includes("[/CODE_GS]")) {
-        isTruncated = true;
-      }
-      if (accumulatedText.includes("[CODE_HTML]") && !accumulatedText.includes("[/CODE_HTML]")) {
-        isTruncated = true;
-      }
-      if (isTruncated) {
+      let isGsTruncated = accumulatedText.includes("[CODE_GS]") && !accumulatedText.includes("[/CODE_GS]");
+      let isHtmlTruncated = accumulatedText.includes("[CODE_HTML]") && !accumulatedText.includes("[/CODE_HTML]");
+      if (isGsTruncated) {
+        setTruncatedType("gs");
         setShowTruncationModal(true);
+      } else if (isHtmlTruncated) {
+        setTruncatedType("html");
+        setShowTruncationModal(true);
+      } else {
+        setTruncatedType(null);
       }
     } catch (err: any) {
       const errorMsg = {
@@ -682,6 +690,176 @@ export default function ResultPage() {
       });
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  // Continue truncated code generation and append it correctly
+  const handleContinueGeneration = async () => {
+    if (!prompt || !profile || !truncatedType) return;
+
+    const type = truncatedType;
+    setShowTruncationModal(false);
+    setFirstGenLoading(true);
+    setFirstGenStatus(`Melanjutkan penulisan kode ${type === "gs" ? "backend (code.gs)" : "frontend (index.html)"}...`);
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+      }
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Konfigurasi Supabase tidak lengkap.");
+      }
+
+      const currentCode = type === "gs" ? editedGs : editedHtml;
+      const baseCode = currentCode; // Keep a backup to append to
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "apikey": supabaseAnonKey,
+        },
+        body: JSON.stringify({
+          appName: prompt.appName,
+          appDescription: prompt.description,
+          codeGs: type === "gs" ? currentCode : "",
+          codeHtml: type === "html" ? currentCode : "",
+          generateType: type,
+          isContinuation: true,
+          messages: [
+            {
+              role: "user" as const,
+              content: `Lanjutkan penulisan kode ${type === "gs" ? "backend code.gs" : "frontend index.html"} yang terpotong.`,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Gagal melanjutkan streaming.");
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Response stream is not available.");
+      }
+
+      const decoder = new TextDecoder();
+      let done = false;
+      let buffer = "";
+      let accumulatedText = "";
+
+      // Add a chat bubble to inform the user
+      const userMsg = { role: "user" as const, content: `✨ Lanjutkan ${type === "gs" ? "code.gs" : "index.html"}` };
+      const assistantTempMsg = { role: "assistant" as const, content: "Melanjutkan penulisan..." };
+      const updatedChat = [...chatMessages, userMsg, assistantTempMsg];
+      setChatMessages(updatedChat);
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(trimmed.slice(6));
+                const content = parsed.choices?.[0]?.delta?.content || "";
+                accumulatedText += content;
+
+                const parsedContent = parseTaggedContent(accumulatedText);
+
+                if (type === "gs" && parsedContent.codeGs) {
+                  setEditedGs(baseCode + parsedContent.codeGs);
+                } else if (type === "html" && parsedContent.codeHtml) {
+                  setEditedHtml(baseCode + parsedContent.codeHtml);
+                }
+
+                const bubbleContent = getBubbleContent(accumulatedText, parsedContent);
+                setChatMessages((prev) => {
+                  const next = [...prev];
+                  if (next.length > 0) {
+                    next[next.length - 1] = {
+                      role: "assistant",
+                      content: bubbleContent || "Melanjutkan penulisan...",
+                    };
+                  }
+                  return next;
+                });
+              } catch (e) {
+                // Ignore partial JSON parse errors
+              }
+            }
+          }
+        }
+      }
+
+      const finalParsed = parseTaggedContent(accumulatedText);
+      const continuedCode = type === "gs" ? finalParsed.codeGs : finalParsed.codeHtml;
+      
+      const finalCode = baseCode + continuedCode;
+      if (type === "gs") {
+        setEditedGs(finalCode);
+      } else {
+        setEditedHtml(finalCode);
+      }
+      setIsSaved(true);
+
+      const assistantMessage = {
+        role: "assistant" as const,
+        content: (finalParsed.explanation || "") + `\n\n✓ Kode ${type === "gs" ? "backend (code.gs)" : "frontend (index.html)"} berhasil dilanjutkan dan digabungkan!`,
+      };
+
+      const finalChat = [...chatMessages, userMsg, assistantMessage];
+      setChatMessages(finalChat);
+
+      // Refresh profile quota from DB
+      const updatedProf = await getProfile();
+      setProfile(updatedProf);
+
+      // Save to database
+      await saveWorkspaceToHistory(
+        type === "gs" ? finalCode : editedGs,
+        type === "html" ? finalCode : editedHtml,
+        finalChat
+      );
+
+      // Check if it got truncated again
+      const closingTag = type === "gs" ? "[/CODE_GS]" : "[/CODE_HTML]";
+      const codeTag = type === "gs" ? "[CODE_GS]" : "[CODE_HTML]";
+      const isTruncatedAgain = accumulatedText.includes(codeTag) && !accumulatedText.includes(closingTag);
+      if (isTruncatedAgain) {
+        setTruncatedType(type);
+        setShowTruncationModal(true);
+      } else {
+        setTruncatedType(null);
+      }
+
+    } catch (err: any) {
+      alert(`Error: ${err.message || "Gagal melanjutkan penulisan kode."}`);
+      setChatMessages((prev) => {
+        const next = [...prev];
+        if (next.length > 0 && next[next.length - 1].role === "assistant" && !next[next.length - 1].content) {
+          next.pop();
+        }
+        return next;
+      });
+    } finally {
+      setFirstGenLoading(false);
+      setFirstGenStatus("");
     }
   };
 
@@ -1189,14 +1367,20 @@ export default function ResultPage() {
               <h3 className="text-lg font-bold text-white font-display">Generasi Terpotong</h3>
             </div>
             <p className="text-xs text-surface-400 mb-6 leading-relaxed">
-              Generate belum selesai karena limit token API. Silakan ketik <strong>"lanjutkan"</strong> di kolom chat untuk menyelesaikan penulisan kode.
+              Generate belum selesai karena limit token API. Klik tombol <strong>"Lanjutkan Penulisan"</strong> di bawah untuk otomatis menyelesaikan penulisan kode yang tersisa tanpa merusak kode sebelumnya.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowTruncationModal(false)}
+                className="btn-ghost flex-1 text-xs"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleContinueGeneration}
                 className="btn-primary flex-1 text-xs"
               >
-                Mengerti
+                Lanjutkan Penulisan
               </button>
             </div>
           </div>
