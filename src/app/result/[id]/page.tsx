@@ -57,10 +57,10 @@ const parseTaggedContent = (text: string) => {
   const cleanCodeFences = (str: string) => {
     let cleaned = str.trim();
     // Remove leading ```javascript or ```html or ``` (case-insensitive)
-    cleaned = cleaned.replace(/^```(?:javascript|html|gs)?\s*\n/i, "");
+    cleaned = cleaned.replace(/^`{3,4}(?:javascript|html|gs|js)?\s*\n?/i, "");
     // Remove trailing ```
-    cleaned = cleaned.replace(/\n```\s*$/, "");
-    return cleaned;
+    cleaned = cleaned.replace(/\n?`{3,4}\s*$/, "");
+    return cleaned.trim();
   };
 
   if (hasExplanation) {
