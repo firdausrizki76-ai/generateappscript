@@ -522,13 +522,6 @@ export default function GeneratePage() {
                       className="text-2xl font-bold text-slate-900 bg-transparent border-none p-0 focus:ring-0 focus:outline-none w-full mb-1 placeholder-slate-300 transition-colors hover:bg-slate-100 rounded px-1 -ml-1"
                       placeholder="Nama Menu..."
                     />
-                    <input
-                      type="text"
-                      value={activeMenu.description}
-                      onChange={(e) => updateMenu(activeMenuIndex, { description: e.target.value })}
-                      className="text-sm text-slate-500 bg-transparent border-none p-0 focus:ring-0 focus:outline-none w-full placeholder-slate-300 transition-colors hover:bg-slate-100 rounded px-1 -ml-1"
-                      placeholder="Deskripsi untuk menu ini..."
-                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="relative group">
@@ -577,7 +570,23 @@ export default function GeneratePage() {
               </div>
 
               {/* Data Table Workspace */}
-              <div className="p-4 sm:p-8 flex-1">
+              <div className="p-4 sm:p-8 flex-1 flex flex-col gap-6">
+                
+                {/* Menu Description */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                  <label className="block text-sm font-bold text-slate-800 mb-2 font-display flex items-center gap-2">
+                    <FileEdit className="h-4 w-4 text-brand-500" /> Deskripsi Menu
+                    <span className="text-slate-400 font-normal text-xs ml-1">(Jelaskan sedetail mungkin fungsi dan relasi data untuk hasil AI maksimal)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={activeMenu.description}
+                    onChange={(e) => updateMenu(activeMenuIndex, { description: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors resize-none placeholder-slate-400"
+                    placeholder="Contoh: Halaman ini digunakan untuk menginput kehadiran harian siswa. Pilihan nama otomatis terhubung dengan dropdown dinamis dari sheet Data Siswa..."
+                  />
+                </div>
+
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                   {/* CRUD Toggle Editor inside the table header */}
                   <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
@@ -591,24 +600,24 @@ export default function GeneratePage() {
                         <span>* Izin Akses (Create, Read, Update, Delete)</span>
                         <button onClick={() => setShowCrudHelp(true)} className="h-4 w-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center hover:bg-brand-100 hover:text-brand-600 transition-colors" title="Penjelasan CRUD">?</button>
                       </div>
-                      <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm gap-1">
+                      <div className="flex bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm gap-2">
                         {(["create", "read", "update", "delete"] as const).map((op) => (
                           <button
                             key={op}
                             onClick={() => updateMenu(activeMenuIndex, { crud: { ...activeMenu.crud, [op]: !activeMenu.crud[op] } })}
-                            className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all flex items-center gap-1.5 ${
+                            className={`px-3.5 py-2 rounded-lg text-xs font-semibold capitalize transition-all flex items-center gap-2 ${
                               activeMenu.crud[op]
-                                ? "text-white shadow-sm scale-105"
-                                : "text-slate-400 hover:text-slate-700 hover:bg-slate-50"
+                                ? "text-white shadow-md scale-[1.02]"
+                                : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
                             }`}
                             style={{
                               backgroundColor: activeMenu.crud[op] ? activeColor : undefined,
                             }}
                           >
-                            {op === "create" && <Plus className="h-3 w-3" />}
-                            {op === "read" && <Eye className="h-3 w-3" />}
-                            {op === "update" && <RefreshCw className="h-3 w-3" />}
-                            {op === "delete" && <Trash2 className="h-3 w-3" />}
+                            {op === "create" && <Plus className="h-3.5 w-3.5" />}
+                            {op === "read" && <Eye className="h-3.5 w-3.5" />}
+                            {op === "update" && <RefreshCw className="h-3.5 w-3.5" />}
+                            {op === "delete" && <Trash2 className="h-3.5 w-3.5" />}
                             {op}
                           </button>
                         ))}
