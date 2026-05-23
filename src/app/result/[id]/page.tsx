@@ -340,6 +340,9 @@ export default function ResultPage() {
 
       const finalParsed = parseTaggedContent(accumulatedText);
       const generatedGs = finalParsed.codeGs;
+      if (!generatedGs) {
+        throw new Error("Model AI tidak mengembalikan blok kode backend ([CODE_GS]) yang valid. Silakan coba generate ulang.");
+      }
       setEditedGs(generatedGs);
 
       const gsAssistantMessage = {
@@ -514,6 +517,9 @@ export default function ResultPage() {
 
       const finalParsedHtml = parseTaggedContent(accumulatedTextHtml);
       const generatedHtml = finalParsedHtml.codeHtml;
+      if (!generatedHtml) {
+        throw new Error("Model AI tidak mengembalikan blok kode frontend ([CODE_HTML]) yang valid. Silakan coba generate ulang.");
+      }
       setEditedHtml(generatedHtml);
       setIsSaved(true);
 
