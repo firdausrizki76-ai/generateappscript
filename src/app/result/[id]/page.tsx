@@ -153,43 +153,60 @@ export default function ResultPage() {
     }
 
     setFirstGenLoading(true);
-    setFirstGenStatus("Menghasilkan kode backend (code.gs)... (Langkah 1/2)");
+    let currentGs = editedGs;
+
     try {
-      // Langkah 1: Generate code.gs
-      const initialMessagesGs: { role: "user" | "assistant"; content: string }[] = [
-        {
-          role: "user",
-          content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}`,
-        },
-      ];
+      // Langkah 1: Generate code.gs (hanya jika belum dibuat)
+      if (!currentGs) {
+        setFirstGenStatus("Menghasilkan kode backend (code.gs)... (Langkah 1/2)");
+        const initialMessagesGs: { role: "user" | "assistant"; content: string }[] = [
+          {
+            role: "user",
+            content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}`,
+          },
+        ];
 
-      const gsRes = await supabase.functions.invoke("chat", {
-        body: {
-          appName: prompt.appName,
-          appDescription: prompt.description,
-          codeGs: "",
-          codeHtml: "",
-          generateType: "gs",
-          messages: initialMessagesGs,
-        },
-      });
+        const gsRes = await supabase.functions.invoke("chat", {
+          body: {
+            appName: prompt.appName,
+            appDescription: prompt.description,
+            codeGs: "",
+            codeHtml: "",
+            generateType: "gs",
+            messages: initialMessagesGs,
+          },
+        });
 
-      const gsResult = gsRes.data;
-      const gsError = gsRes.error;
+        const gsResult = gsRes.data;
+        const gsError = gsRes.error;
 
-      if (gsError || !gsResult || !gsResult.success) {
-        throw new Error(gsError?.message || gsResult?.error || "Gagal men-generate kode backend (code.gs).");
+        if (gsError || !gsResult || !gsResult.success) {
+          throw new Error(gsError?.message || gsResult?.error || "Gagal men-generate kode backend (code.gs).");
+        }
+
+        currentGs = gsResult.codeGs;
+        setEditedGs(currentGs);
+
+        // Simpan progress backend langsung ke database agar tidak rugi kuota API jika langkah 2 gagal
+        const gsAssistantMessage = {
+          role: "assistant" as const,
+          content: (gsResult.explanation || "") + "\n\n✓ Kode backend (code.gs) berhasil dibuat. Melanjutkan pembuatan frontend...",
+        };
+        const updatedChatWithGs = [
+          ...chatMessages,
+          { role: "user" as const, content: "✨ Generate kode backend" },
+          gsAssistantMessage
+        ];
+        setChatMessages(updatedChatWithGs);
+        await saveWorkspaceToHistory(currentGs, "", updatedChatWithGs);
       }
 
-      const generatedGs = gsResult.codeGs;
-
+      // Langkah 2: Generate index.html (skip quota increment karena kelanjutan transaksi)
       setFirstGenStatus("Menghasilkan kode frontend (index.html)... (Langkah 2/2)");
-
-      // Langkah 2: Generate index.html (skip quota increment)
       const initialMessagesHtml: { role: "user" | "assistant"; content: string }[] = [
         {
           role: "user",
-          content: `Buatkan kode frontend (index.html) saja menyesuaikan kode backend berikut:\n\n${generatedGs}`,
+          content: `Buatkan kode frontend (index.html) saja menyesuaikan kode backend berikut:\n\n${currentGs}`,
         },
       ];
 
@@ -197,7 +214,7 @@ export default function ResultPage() {
         body: {
           appName: prompt.appName,
           appDescription: prompt.description,
-          codeGs: generatedGs,
+          codeGs: currentGs,
           codeHtml: "",
           generateType: "html",
           skipQuotaIncrement: true,
@@ -213,32 +230,27 @@ export default function ResultPage() {
       }
 
       const generatedHtml = htmlResult.codeHtml;
-
-      // Update workspace states
-      setEditedGs(generatedGs);
       setEditedHtml(generatedHtml);
       setIsSaved(true);
 
-      const assistantMessage = {
+      const htmlAssistantMessage = {
         role: "assistant" as const,
-        content: (gsResult.explanation || "") + "\n\n" + (htmlResult.explanation || "") + "\n\nKode awal berhasil di-generate! Silakan periksa tab code.gs dan index.html di sebelah kiri.",
+        content: (htmlResult.explanation || "") + "\n\n✓ Kode frontend (index.html) berhasil dibuat! Silakan periksa tab editor di sebelah kiri.",
       };
 
-      // Tampilkan pesan awal yang bersih (tidak sepanjang markdown aslinya) di UI chat
-      const cleanUserMsg = {
-        role: "user" as const,
-        content: "✨ Generate kode awal dari plan.md",
-      };
-
-      const updatedChat = [...chatMessages, cleanUserMsg, assistantMessage];
-      setChatMessages(updatedChat);
+      const finalChat = [
+        ...chatMessages,
+        { role: "user" as const, content: "✨ Generate kode frontend" },
+        htmlAssistantMessage
+      ];
+      setChatMessages(finalChat);
 
       // Refresh profile quota from DB
       const updatedProf = await getProfile();
       setProfile(updatedProf);
 
-      // Save to History
-      saveWorkspaceToHistory(generatedGs, generatedHtml, updatedChat);
+      // Simpan hasil komplit ke database
+      await saveWorkspaceToHistory(currentGs, generatedHtml, finalChat);
       setActiveTab("gs");
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
