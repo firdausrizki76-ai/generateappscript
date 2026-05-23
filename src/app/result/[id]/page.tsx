@@ -116,11 +116,13 @@ export default function ResultPage() {
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showTruncationModal, setShowTruncationModal] = useState(false);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom of chat
+  // Auto-scroll to bottom of chat container internally (without locking main page scroll)
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [chatMessages, chatLoading]);
 
   useEffect(() => {
@@ -1051,7 +1053,7 @@ export default function ResultPage() {
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-surface-950/20 flex flex-col">
+            <div ref={chatContainerRef} className="flex-1 p-4 overflow-y-auto space-y-4 bg-surface-950/20 flex flex-col">
               {!isPro ? (
                 // Locked status for Free users
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
@@ -1113,7 +1115,6 @@ export default function ResultPage() {
                   </div>
                 </div>
               )}
-              <div ref={chatEndRef} />
             </div>
 
             {/* Chat Input form */}
