@@ -114,6 +114,7 @@ export default function ResultPage() {
 
   // Quota modal warning
   const [showQuotaModal, setShowQuotaModal] = useState(false);
+  const [showTruncationModal, setShowTruncationModal] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -328,6 +329,12 @@ export default function ResultPage() {
 
       // Simpan ke database
       await saveWorkspaceToHistory(generatedGs, editedHtml, finalChat);
+
+      // Check truncation
+      const isTruncated = accumulatedText.includes("[CODE_GS]") && !accumulatedText.includes("[/CODE_GS]");
+      if (isTruncated) {
+        setShowTruncationModal(true);
+      }
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
       setChatMessages((prev) => {
@@ -470,6 +477,12 @@ export default function ResultPage() {
 
       // Simpan ke database
       await saveWorkspaceToHistory(editedGs, generatedHtml, finalChat);
+
+      // Check truncation
+      const isTruncated = accumulatedTextHtml.includes("[CODE_HTML]") && !accumulatedTextHtml.includes("[/CODE_HTML]");
+      if (isTruncated) {
+        setShowTruncationModal(true);
+      }
     } catch (err: any) {
       alert(`Error: ${err.message || "Gagal menghubungkan ke server."}`);
       setChatMessages((prev) => {
@@ -639,6 +652,18 @@ export default function ResultPage() {
 
       // Save database record
       await saveWorkspaceToHistory(nextGs, nextHtml, finalMessages);
+
+      // Check truncation
+      let isTruncated = false;
+      if (accumulatedText.includes("[CODE_GS]") && !accumulatedText.includes("[/CODE_GS]")) {
+        isTruncated = true;
+      }
+      if (accumulatedText.includes("[CODE_HTML]") && !accumulatedText.includes("[/CODE_HTML]")) {
+        isTruncated = true;
+      }
+      if (isTruncated) {
+        setShowTruncationModal(true);
+      }
     } catch (err: any) {
       const errorMsg = {
         role: "assistant" as const,
@@ -1146,6 +1171,31 @@ export default function ResultPage() {
                 className="btn-primary flex-1 text-xs"
               >
                 Reset Kuota (Demo)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Truncation Warning Modal ─── */}
+      {showTruncationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="glass border border-surface-800 rounded-2xl p-6 max-w-md w-full mx-4 animate-fade-up">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-yellow-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white font-display">Generasi Terpotong</h3>
+            </div>
+            <p className="text-xs text-surface-400 mb-6 leading-relaxed">
+              Generate belum selesai karena limit token API. Silakan ketik <strong>"lanjutkan"</strong> di kolom chat untuk menyelesaikan penulisan kode.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTruncationModal(false)}
+                className="btn-primary flex-1 text-xs"
+              >
+                Mengerti
               </button>
             </div>
           </div>
