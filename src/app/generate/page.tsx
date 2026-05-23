@@ -456,7 +456,7 @@ export default function GeneratePage() {
               {/* Login/Auth Question */}
               <div className="pt-4 border-t border-surface-800/60 space-y-4">
                 <label className="block text-sm font-medium text-surface-200 font-display">
-                  Apakah aplikasi memerlukan Halaman Login / Pembatasan Akses?
+                  Apakah aplikasi memerlukan Halaman Login (Username & Password dari Spreadsheet)?
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Card 1: Tidak */}
@@ -475,7 +475,7 @@ export default function GeneratePage() {
                     <div>
                       <p className="font-semibold font-display text-white text-sm">Tidak (Akses Terbuka)</p>
                       <p className="text-xs text-surface-400 mt-1 leading-relaxed">
-                        Siapa saja yang memiliki link web app dapat langsung mengakses seluruh fitur.
+                        Siapa saja yang memiliki link web app dapat langsung mengakses seluruh fitur tanpa login.
                       </p>
                     </div>
                   </button>
@@ -494,9 +494,9 @@ export default function GeneratePage() {
                       <Lock className="h-6 w-6" />
                     </div>
                     <div>
-                      <p className="font-semibold font-display text-white text-sm">Ya (Dengan Login Custom)</p>
+                      <p className="font-semibold font-display text-white text-sm">Ya (Form Login Custom - Multi Role)</p>
                       <p className="text-xs text-surface-400 mt-1 leading-relaxed">
-                        Membatasi akses. Pengguna harus memasukkan username & password yang divalidasi langsung dari Google Sheets.
+                        Membatasi akses menggunakan Form Login (Username & Password) dari Google Sheets, mendukung multi-role (Admin, Guru, Siswa, dll).
                       </p>
                     </div>
                   </button>

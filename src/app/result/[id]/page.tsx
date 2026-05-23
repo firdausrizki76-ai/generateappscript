@@ -376,7 +376,7 @@ export default function ResultPage() {
       const initialMessagesHtml = [
         {
           role: "user" as const,
-          content: `Buatkan kode frontend (index.html) saja menyesuaikan kode backend berikut:\n\n${editedGs}`,
+          content: `Buatkan kode frontend (index.html) saja berdasarkan plan berikut:\n\n${prompt.outputMd}\n\nDan sesuaikan dengan kode backend (code.gs) berikut:\n\n${editedGs}`,
         },
       ];
 

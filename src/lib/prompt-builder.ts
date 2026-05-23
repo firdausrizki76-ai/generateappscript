@@ -142,7 +142,7 @@ export function buildPrompt(data: WizardData): string {
     ln(`### Mekanisme Halaman Login & Validasi Akses (Premium UI):`);
     ln(`1. **Form Login Premium Custom:**`);
     ln(`   - Tampilkan Halaman Login minimalis bergaya glassmorphism di tengah layar jika pengguna belum login.`);
-    ln(`   - Sediakan input field untuk **Username** dan **Password**.`);
+    ln(`   - Sediakan form input Username dan Password (bukan otomatis login dari Google).`);
     const rolesList = data.loginAccess ? data.loginAccess.split(",").map(r => r.trim()).filter(Boolean) : [];
     if (rolesList.length > 0) {
       ln(`   - Sediakan dropdown pilihan **Role** (Pilihan: ${rolesList.map(r => `"${r}"`).join(", ")}).`);
@@ -150,7 +150,7 @@ export function buildPrompt(data: WizardData): string {
     ln(`   - Tombol **"Masuk ke Aplikasi"** dengan visual loading spinner saat memverifikasi kredensial.`);
     ln(`2. **Proses Verifikasi Kredensial (Server-Side):**`);
     ln(`   - Ketika tombol login diklik, panggil server function \`loginUser(username, password, role)\`.`);
-    ln(`   - Fungsi backend akan mencari baris yang cocok di \`Sheet_Users\`.`);
+    ln(`   - Fungsi backend akan mencari baris yang cocok di \`Sheet_Users\` (username, password, dan role harus cocok).`);
     ln(`   - Jika cocok, simpan status sesi login di client-side (menggunakan \`localStorage\` atau \`sessionStorage\` seperti \`sessionUser = { username, role, nama_lengkap }\`).`);
     ln(`   - Sembunyikan form login and tampilkan dashboard utama aplikasi.`);
     ln(`3. **Pembatasan Akses Menu Berdasarkan Role (Role-based Access Control):**`);
@@ -169,11 +169,15 @@ export function buildPrompt(data: WizardData): string {
   ln();
   ln(`\`\`\`javascript`);
   ln(`// === Core Functions ===`);
-  ln(`function doGet() { /* serve HTML */ }`);
+  if (data.hasLogin) {
+    ln(`function doGet() { /* serve HTML, pastikan memanggil initUserTable() untuk inisialisasi user */ }`);
+  } else {
+    ln(`function doGet() { /* serve HTML */ }`);
+  }
   ln(`function include(filename) { /* include partial HTML */ }`);
   if (data.hasLogin) {
     ln(`function loginUser(username, password, role) { /* cari username, password, dan role yang cocok di Sheet_Users, return { success: true/false, user: { username, role, nama_lengkap } } */ }`);
-    ln(`function initUserTable() { /* otomatis buat Sheet_Users dengan default akun admin jika belum ada. Default: username "admin", password "admin123", role "Admin" */ }`);
+    ln(`function initUserTable() { /* otomatis buat Sheet_Users dengan default akun admin jika belum ada. Default: username "admin", password "admin123", role "Admin", nama_lengkap "Administrator" */ }`);
   }
   ln();
   for (const sheet of data.sheets) {
@@ -225,9 +229,10 @@ export function buildPrompt(data: WizardData): string {
     ln(`- **Langkah Keamanan Wajib:**`);
     ln(`  1. **Verifikasi Kredensial Server-Side:** Selalu validasi kecocokan username dan password langsung dari data baris \`Sheet_Users\` melalui Apps Script backend. Jangan pernah melakukan validasi password hardcoded di sisi HTML client-side.`);
     ln(`  2. **Validasi Sesi pada Operasi CRUD:** Setiap fungsi CRUD di backend (\`getData_\`, \`createData_\`, dll) harus menerima parameter username/role aktif dan melakukan pengecekan ulang apakah user tersebut memiliki hak akses yang valid sebelum memproses data Sheets.`);
-    ln(`  3. **Metode Deploy Web App:** Tulis instruksi deploy agar pengguna mengatur konfigurasi deploy sebagai berikut:`);
+    ln(`  3. **HINDARI Session.getActiveUser().getEmail():** JANGAN sekali-kali menggunakan \`Session.getActiveUser().getEmail()\` untuk mengidentifikasi pengguna atau membatasi akses di client-side maupun backend, karena aplikasi dideploy dengan akses "Anyone" (Siapa saja). Seluruh identifikasi user harus dilakukan melalui data username dari form login yang disimpan di client-side sessionStorage/localStorage.`);
+    ln(`  4. **Metode Deploy Web App:** Tulis instruksi deploy agar pengguna mengatur konfigurasi deploy sebagai berikut:`);
     ln(`     - **Execute as:** \`Me\` (Saya)`);
-    ln(`     - **Who has access:** \`Anyone\` (Siapa saja, termasuk pengguna tanpa login Google, karena verifikasi sudah ditangani oleh sistem login form custom kita sendiri)`);
+    ln(`     - **Who has access:** \`Anyone\` (Siapa saja, termasuk pengguna tanpa login Google, karena verifikasi sudah ditangani oleh sistem login form kustom kita sendiri)`);
   } else {
     ln(`- **Akses:** Terbuka Bebas (Siapa saja dengan tautan dapat masuk)`);
     ln(`- **Metode Deploy Web App:**`);
