@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sparkles,
@@ -31,6 +31,13 @@ import {
   Lock,
   Unlock,
   Mail,
+  MoreVertical,
+  Search,
+  Download,
+  SlidersHorizontal,
+  X,
+  Smartphone,
+  Monitor
 } from "lucide-react";
 import {
   getProfile,
@@ -46,26 +53,19 @@ import {
 } from "@/lib/store";
 import { buildPrompt } from "@/lib/prompt-builder";
 
-/* ─── Step configuration ─── */
-const steps = [
-  { label: "Identitas", icon: FileText },
-  { label: "Menu & Fitur", icon: LayoutGrid },
-  { label: "Struktur Data", icon: Database },
-  { label: "Tampilan & UX", icon: Palette },
-  { label: "Review", icon: ClipboardList },
+const dataSourceOptions = ["Google Sheets", "Google Forms + Sheets", "Google Drive", "Kombinasi"];
+const userTypeOptions = ["Hanya saya sendiri", "Tim kecil (< 10 orang)", "Banyak pengguna"];
+const tableLayouts = ["Tabel klasik", "Card grid", "Kombinasi"];
+const extraFeaturesList = [
+  "Dashboard/summary di halaman utama",
+  "Grafik/chart dari data",
+  "Import data dari CSV",
+  "Log aktivitas pengguna",
+  "Backup otomatis ke Google Drive",
 ];
+const dataTypes = ["Teks", "Angka", "Tanggal", "Pilihan", "Boolean"];
+const exportFormatOptions = ["PDF", "CSV", "Cetak langsung"];
 
-const dataSourceOptions = [
-  "Google Sheets",
-  "Google Forms + Sheets",
-  "Google Drive",
-  "Kombinasi",
-];
-const userTypeOptions = [
-  "Hanya saya sendiri",
-  "Tim kecil (< 10 orang)",
-  "Banyak pengguna",
-];
 const menuIconOptions = [
   { name: "ClipboardList", component: ClipboardList, label: "Daftar" },
   { name: "Users", component: Users, label: "Pengguna" },
@@ -82,46 +82,26 @@ const menuIconOptions = [
 ];
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  ClipboardList,
-  Users,
-  BarChart3,
-  Package,
-  DollarSign,
-  Calendar,
-  Bell,
-  FileEdit,
-  Settings,
-  Folder,
-  TrendingUp,
-  Tag,
+  ClipboardList, Users, BarChart3, Package, DollarSign, Calendar, Bell, FileEdit, Settings, Folder, TrendingUp, Tag,
 };
 
 const renderMenuIcon = (iconName: string, className = "h-4 w-4 inline mr-1 text-brand-400") => {
   const IconComp = iconMap[iconName];
-  if (IconComp) {
-    return <IconComp className={className} />;
-  }
+  if (IconComp) return <IconComp className={className} />;
+  
+  // Fallbacks for older data using emojis
   const fallbackEmojis: Record<string, string> = {
-    "📋": "ClipboardList",
-    "👥": "Users",
-    "📊": "BarChart3",
-    "📦": "Package",
-    "💰": "DollarSign",
-    "📅": "Calendar",
-    "🔔": "Bell",
-    "📝": "FileEdit",
-    "⚙️": "Settings",
-    "🗂️": "Folder",
-    "📈": "TrendingUp",
-    "🏷️": "Tag",
+    "📋": "ClipboardList", "👥": "Users", "📊": "BarChart3", "📦": "Package", "💰": "DollarSign",
+    "📅": "Calendar", "🔔": "Bell", "📝": "FileEdit", "⚙️": "Settings", "🗂️": "Folder", "📈": "TrendingUp", "🏷️": "Tag",
   };
   const mappedIcon = fallbackEmojis[iconName];
   if (mappedIcon && iconMap[mappedIcon]) {
     const FallbackIcon = iconMap[mappedIcon];
     return <FallbackIcon className={className} />;
   }
-  return <span className="mr-1">{iconName}</span>;
+  return <Database className={className} />; // safe fallback
 };
+
 const colorPresets = [
   { name: "Biru profesional", color: "#0d6efd" },
   { name: "Hijau segar", color: "#198754" },
@@ -129,25 +109,19 @@ const colorPresets = [
   { name: "Abu netral", color: "#6c757d" },
   { name: "Custom hex", color: "" },
 ];
-const tableLayouts = ["Tabel klasik", "Card grid", "Kombinasi"];
-const extraFeaturesList = [
-  "Dashboard/summary di halaman utama",
-  "Grafik/chart dari data",
-  "Import data dari CSV",
-  "Log aktivitas pengguna",
-  "Backup otomatis ke Google Drive",
-];
-const dataTypes = ["Teks", "Angka", "Tanggal", "Pilihan", "Boolean"];
-const exportFormatOptions = ["PDF", "CSV", "Cetak langsung"];
 
 export default function GeneratePage() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(getDefaultWizardData());
   const [generating, setGenerating] = useState(false);
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  
+  // Builder UI State
+  const [activeMenuIndex, setActiveMenuIndex] = useState<number>(0);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
 
   useEffect(() => {
     setMounted(true);
@@ -160,71 +134,101 @@ export default function GeneratePage() {
       setProfile(prof);
     };
     fetchProfile();
+    
+    // Default name if empty
+    if (!data.appName) {
+      setData(prev => ({...prev, appName: "Aplikasi Baru", appDescription: "Aplikasi internal untuk manajemen data."}));
+    }
   }, [router]);
 
-  /* ─── Helpers ─── */
-  const updateData = (partial: Partial<WizardData>) =>
-    setData((prev) => ({ ...prev, ...partial }));
+  /* ─── Data Syncing Helpers ─── */
+  
+  const updateData = (partial: Partial<WizardData>) => setData((prev) => ({ ...prev, ...partial }));
 
-  const updateMenu = (idx: number, partial: Partial<MenuItem>) =>
+  const syncSheetsWithMenus = (currentMenus: MenuItem[], currentSheets: SheetDef[]) => {
+    // We create a sheet for every menu that has CRUD operations
+    const crudMenus = currentMenus.filter(m => m.crud.create || m.crud.update || m.crud.delete || m.crud.read);
+    const newSheets: SheetDef[] = crudMenus.map(menu => {
+      const existing = currentSheets.find(s => s.menuName === menu.name);
+      return existing || {
+        menuName: menu.name || "Menu Baru",
+        sheetName: `Sheet_${(menu.name || "Menu").replace(/\s+/g, "_")}`,
+        columns: [{ name: "Nama", type: "Teks", required: true, note: "" }],
+        autoCreatedAt: true,
+        autoUpdatedAt: true,
+        autoCreatedBy: false,
+      };
+    });
+    return newSheets;
+  };
+
+  const updateMenu = (idx: number, partial: Partial<MenuItem>) => {
     setData((prev) => {
       const menus = [...prev.menus];
+      
+      // If menu name is changed, we must rename the associated sheet's menuName to keep them linked
+      let sheets = [...prev.sheets];
+      if (partial.name !== undefined && menus[idx].name !== partial.name) {
+        const oldName = menus[idx].name;
+        sheets = sheets.map(s => s.menuName === oldName ? { ...s, menuName: partial.name! } : s);
+      }
+      
       menus[idx] = { ...menus[idx], ...partial };
-      return { ...prev, menus };
+      const syncedSheets = syncSheetsWithMenus(menus, sheets);
+      return { ...prev, menus, sheets: syncedSheets };
     });
+  };
 
   const addMenu = () => {
     if (data.menus.length >= 10) return;
-    setData((prev) => ({
-      ...prev,
-      menus: [
-        ...prev.menus,
-        {
-          name: "",
-          icon: "ClipboardList",
-          description: "",
-          crud: { create: true, read: true, update: true, delete: true },
-          hasFilter: false,
-          filterColumns: "",
-          hasExport: false,
-          exportFormats: [],
-        },
-      ],
-    }));
+    setData((prev) => {
+      const newMenuName = `Menu ${prev.menus.length + 1}`;
+      const newMenu: MenuItem = {
+        name: newMenuName,
+        icon: "ClipboardList",
+        description: "Deskripsi menu baru",
+        crud: { create: true, read: true, update: true, delete: true },
+        hasFilter: true,
+        filterColumns: "",
+        hasExport: false,
+        exportFormats: [],
+      };
+      const menus = [...prev.menus, newMenu];
+      const sheets = syncSheetsWithMenus(menus, prev.sheets);
+      
+      // Set active menu to the newly created one
+      setTimeout(() => setActiveMenuIndex(menus.length - 1), 0);
+      
+      return { ...prev, menus, sheets };
+    });
   };
 
   const removeMenu = (idx: number) => {
     if (data.menus.length <= 1) return;
-    setData((prev) => ({
-      ...prev,
-      menus: prev.menus.filter((_, i) => i !== idx),
-    }));
+    setData((prev) => {
+      const menuToRemove = prev.menus[idx];
+      const menus = prev.menus.filter((_, i) => i !== idx);
+      const sheets = prev.sheets.filter(s => s.menuName !== menuToRemove.name);
+      
+      if (activeMenuIndex >= menus.length) {
+        setActiveMenuIndex(menus.length - 1);
+      } else if (activeMenuIndex === idx) {
+        setActiveMenuIndex(0);
+      }
+      
+      return { ...prev, menus, sheets };
+    });
   };
 
-  /* When moving from step 2→3, auto-generate sheets for CRUD menus */
-  const syncSheets = () => {
-    const crudMenus = data.menus.filter(
-      (m) => m.crud.create || m.crud.update || m.crud.delete
-    );
-    const existing = data.sheets;
-    const sheets: SheetDef[] = crudMenus.map((menu) => {
-      const found = existing.find((s) => s.menuName === menu.name);
-      return (
-        found || {
-          menuName: menu.name,
-          sheetName: `Sheet_${menu.name.replace(/\s+/g, "_")}`,
-          columns: [{ name: "", type: "Teks", required: true, note: "" }],
-          autoCreatedAt: true,
-          autoUpdatedAt: true,
-          autoCreatedBy: false,
-        }
-      );
-    });
-    updateData({ sheets });
+  const getActiveSheetIndex = () => {
+    const activeMenu = data.menus[activeMenuIndex];
+    if (!activeMenu) return -1;
+    return data.sheets.findIndex(s => s.menuName === activeMenu.name);
   };
 
   const updateSheet = (sIdx: number, partial: Partial<SheetDef>) =>
     setData((prev) => {
+      if (sIdx < 0 || sIdx >= prev.sheets.length) return prev;
       const sheets = [...prev.sheets];
       sheets[sIdx] = { ...sheets[sIdx], ...partial };
       return { ...prev, sheets };
@@ -232,6 +236,7 @@ export default function GeneratePage() {
 
   const updateColumn = (sIdx: number, cIdx: number, partial: Partial<ColumnDef>) =>
     setData((prev) => {
+      if (sIdx < 0 || sIdx >= prev.sheets.length) return prev;
       const sheets = [...prev.sheets];
       const columns = [...sheets[sIdx].columns];
       columns[cIdx] = { ...columns[cIdx], ...partial };
@@ -241,6 +246,7 @@ export default function GeneratePage() {
 
   const addColumn = (sIdx: number) =>
     setData((prev) => {
+      if (sIdx < 0 || sIdx >= prev.sheets.length) return prev;
       const sheets = [...prev.sheets];
       sheets[sIdx] = {
         ...sheets[sIdx],
@@ -251,6 +257,7 @@ export default function GeneratePage() {
 
   const removeColumn = (sIdx: number, cIdx: number) =>
     setData((prev) => {
+      if (sIdx < 0 || sIdx >= prev.sheets.length) return prev;
       const sheets = [...prev.sheets];
       sheets[sIdx] = {
         ...sheets[sIdx],
@@ -259,30 +266,27 @@ export default function GeneratePage() {
       return { ...prev, sheets };
     });
 
-  /* ─── Navigation ─── */
-  const canNext = () => {
-    if (step === 0)
-      return data.appName.trim() !== "" && data.appDescription.trim() !== "";
-    if (step === 1)
-      return data.menus.every((m) => m.name.trim() !== "" && m.description.trim() !== "");
-    if (step === 2)
-      return data.sheets.every(
-        (s) =>
-          s.sheetName.trim() !== "" &&
-          s.columns.length > 0 &&
-          s.columns.every((c) => c.name.trim() !== "")
-      );
+  /* ─── Theme Colors ─── */
+  const activeColor = useMemo(() => {
+    if (data.colorTheme === "Custom hex" && data.customColor) return data.customColor;
+    const preset = colorPresets.find(p => p.name === data.colorTheme);
+    return preset?.color || "#6366f1";
+  }, [data.colorTheme, data.customColor]);
+
+  /* ─── Validation & Submit ─── */
+  const isDataValid = () => {
+    if (!data.appName.trim()) return false;
+    if (!data.appDescription.trim()) return false;
+    if (data.menus.some(m => !m.name.trim())) return false;
     return true;
   };
 
-  const goNext = () => {
-    if (step === 1) syncSheets();
-    setStep((s) => Math.min(s + 1, 4));
-  };
-  const goBack = () => setStep((s) => Math.max(s - 1, 0));
-
-  /* ─── Generate ─── */
   const handleGenerate = async () => {
+    if (!isDataValid()) {
+      alert("Mohon lengkapi Nama Aplikasi dan Nama Menu sebelum generate.");
+      return;
+    }
+    
     try {
       const prof = profile || await getProfile();
       if (prof.quotaUsed >= prof.quotaLimit) {
@@ -319,621 +323,482 @@ export default function GeneratePage() {
     );
   }
 
-  /* ═══════════════════════════════════════════════
-     RENDER
-     ═══════════════════════════════════════════════ */
-  return (
-    <div className="relative min-h-[80vh] py-10">
-      <div className="absolute inset-0 bg-grid pointer-events-none" />
-      <div className="absolute inset-0 bg-radial-top pointer-events-none" />
+  const activeMenu = data.menus[activeMenuIndex] || data.menus[0];
+  const activeSheetIndex = getActiveSheetIndex();
+  const activeSheet = activeSheetIndex >= 0 ? data.sheets[activeSheetIndex] : null;
 
-      <div className="relative mx-auto max-w-4xl px-4 sm:px-6">
-        {/* ─── Stepper ─── */}
-        <div className="relative flex items-center justify-between max-w-2xl mx-auto mb-12 px-2">
-          {/* Connecting Line */}
-          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-surface-800 pointer-events-none z-0" />
-          <div 
-            className="absolute left-0 top-1/2 -translate-y-1/2 h-[2px] bg-gradient-to-r from-brand-500 to-indigo-500 transition-all duration-500 ease-out pointer-events-none z-0"
-            style={{ width: `${(step / (steps.length - 1)) * 100}%` }}
-          />
-          
-          {steps.map((s, i) => {
-            const Icon = s.icon;
-            const active = i === step;
-            const done = i < step;
-            return (
-              <button
-                key={i}
-                onClick={() => i < step && setStep(i)}
-                disabled={i > step}
-                className="relative z-10 flex flex-col items-center group focus:outline-none"
-              >
-                {/* Circle Indicator */}
-                <div
-                  className={`h-9 w-9 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
-                    active
-                      ? "bg-surface-950 border-brand-500 text-brand-400 shadow-[0_0_15px_rgba(99,102,241,0.5)] scale-110"
-                      : done
-                      ? "bg-brand-600 border-brand-500 text-white cursor-pointer"
-                      : "bg-surface-900 border-surface-800 text-surface-500 cursor-not-allowed"
-                  }`}
-                >
-                  {done ? (
-                    <Check className="h-4.5 w-4.5 stroke-[2.5]" />
-                  ) : (
-                    <Icon className="h-4 w-4" />
-                  )}
-                </div>
-                {/* Label */}
-                <span
-                  className={`absolute -bottom-6 text-[10px] sm:text-xs font-semibold tracking-wide whitespace-nowrap transition-colors duration-300 font-display ${
-                    active
-                      ? "text-brand-300"
-                      : done
-                      ? "text-surface-300"
-                      : "text-surface-500"
-                  }`}
-                >
-                  {s.label}
-                </span>
-              </button>
-            );
-          })}
+  return (
+    <div className="h-[calc(100vh-70px)] flex flex-col md:flex-row overflow-hidden bg-surface-950">
+      
+      {/* ─── SIDEBAR: GLOBAL SETTINGS ─── */}
+      <div className="w-full md:w-80 lg:w-96 flex flex-col border-r border-surface-800 bg-surface-900/50 backdrop-blur-xl shrink-0 overflow-y-auto custom-scrollbar shadow-2xl z-20">
+        <div className="p-6 space-y-8 flex-1">
+          <div>
+            <h1 className="text-xl font-bold font-display text-white mb-2 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-brand-400" /> App Settings
+            </h1>
+            <p className="text-xs text-surface-400">Atur properti dasar dan tampilan global aplikasi Anda.</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-surface-300 mb-1.5 uppercase tracking-wider">Nama Aplikasi</label>
+              <input
+                type="text"
+                value={data.appName}
+                onChange={(e) => updateData({ appName: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-800/80 border border-surface-700 text-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition text-sm font-semibold"
+                placeholder="Nama Aplikasi"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-surface-300 mb-1.5 uppercase tracking-wider">Deskripsi / Tujuan</label>
+              <textarea
+                rows={2}
+                value={data.appDescription}
+                onChange={(e) => updateData({ appDescription: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl bg-surface-800/80 border border-surface-700 text-white focus:border-brand-500 transition text-sm resize-none"
+                placeholder="Deskripsikan fungsi aplikasi..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-surface-300 mb-2 uppercase tracking-wider">Warna Utama</label>
+              <div className="flex flex-wrap gap-2">
+                {colorPresets.map((cp) => (
+                  <button
+                    key={cp.name}
+                    onClick={() => updateData({ colorTheme: cp.name, customColor: cp.color || data.customColor })}
+                    title={cp.name}
+                    className={`h-8 w-8 rounded-full border-2 transition-all transform hover:scale-110 ${
+                      data.colorTheme === cp.name ? "border-white scale-110 shadow-lg shadow-black/50" : "border-transparent"
+                    }`}
+                    style={{ background: cp.color || "linear-gradient(45deg, red, blue)" }}
+                  />
+                ))}
+              </div>
+              {data.colorTheme === "Custom hex" && (
+                <input
+                  type="color"
+                  value={data.customColor}
+                  onChange={(e) => updateData({ customColor: e.target.value })}
+                  className="mt-3 w-full h-10 rounded-xl cursor-pointer bg-surface-800 border-none"
+                />
+              )}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowAdvancedSettings(true)}
+            className="w-full py-3 px-4 rounded-xl border border-surface-700 bg-surface-800/50 hover:bg-surface-800 text-surface-200 flex items-center justify-between transition-colors"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium"><SlidersHorizontal className="h-4 w-4" /> Pengaturan Lanjutan</span>
+            <ChevronRight className="h-4 w-4 text-surface-500" />
+          </button>
         </div>
 
-        {/* ─── Card ─── */}
-        <div className="glass rounded-2xl p-6 sm:p-10 animate-fade-up">
-          {/* ═══ STEP 1: Identitas ═══ */}
-          {step === 0 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-1 font-display">Identitas Aplikasi</h2>
-                <p className="text-sm text-surface-400">Jelaskan aplikasi Apps Script yang ingin Anda buat.</p>
-              </div>
-              {/* App Name */}
-              <div>
-                <label className="block text-sm font-medium text-surface-200 mb-1.5 font-display">
-                  Nama Aplikasi <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder='Contoh: "Sistem Absensi Karyawan"'
-                  value={data.appName}
-                  onChange={(e) => updateData({ appName: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition input-premium"
-                />
-              </div>
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-surface-200 mb-1.5 font-display">
-                  Deskripsi Singkat <span className="text-red-400">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Jelaskan fungsi utama aplikasi ini dalam 2–3 kalimat. Siapa penggunanya? Data apa yang dikelola?"
-                  value={data.appDescription}
-                  onChange={(e) => updateData({ appDescription: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition resize-none input-premium"
-                />
-              </div>
-              {/* Data Source */}
-              <div>
-                <label className="block text-sm font-medium text-surface-200 mb-1.5 font-display">
-                  Sumber Data Utama
-                </label>
-                <select
-                  value={data.dataSource}
-                  onChange={(e) => updateData({ dataSource: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl bg-surface-800/60 border border-surface-700 text-white focus:outline-none focus:border-brand-500 transition input-premium"
-                >
-                  {dataSourceOptions.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              </div>
-              {/* User Type */}
-              <div>
-                <label className="block text-sm font-medium text-surface-200 mb-2 font-display">
-                  Tipe Pengguna Aplikasi
-                </label>
-                <div className="flex flex-wrap gap-3">
-                  {userTypeOptions.map((o) => (
-                    <button
-                      key={o}
-                      onClick={() => updateData({ userType: o })}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all cursor-pointer ${
-                        data.userType === o
-                          ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                          : "border-surface-700 bg-surface-800/40 text-surface-400 hover:border-surface-600"
-                      }`}
-                    >
-                      {o}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Login/Auth Question */}
-              <div className="pt-4 border-t border-surface-800/60 space-y-4">
-                <label className="block text-sm font-medium text-surface-200 font-display">
-                  Apakah aplikasi memerlukan Halaman Login (Username & Password dari Spreadsheet)?
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Card 1: Tidak */}
-                  <button
-                    type="button"
-                    onClick={() => updateData({ hasLogin: false })}
-                    className={`flex items-start gap-4 p-5 rounded-2xl border text-left transition-all duration-300 cursor-pointer ${
-                      !data.hasLogin
-                        ? "border-brand-500 bg-brand-600/10 text-white shadow-lg shadow-brand-500/5 scale-[1.01]"
-                        : "border-surface-800 bg-surface-900/40 text-surface-400 hover:border-surface-700 hover:text-surface-200"
-                    }`}
-                  >
-                    <div className={`p-3 rounded-xl shrink-0 ${!data.hasLogin ? "bg-brand-500/20 text-brand-300" : "bg-surface-800 text-surface-500"}`}>
-                      <Unlock className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="font-semibold font-display text-white text-sm">Tidak (Akses Terbuka)</p>
-                      <p className="text-xs text-surface-400 mt-1 leading-relaxed">
-                        Siapa saja yang memiliki link web app dapat langsung mengakses seluruh fitur tanpa login.
-                      </p>
-                    </div>
-                  </button>
-
-                  {/* Card 2: Ya */}
-                  <button
-                    type="button"
-                    onClick={() => updateData({ hasLogin: true })}
-                    className={`flex items-start gap-4 p-5 rounded-2xl border text-left transition-all duration-300 cursor-pointer ${
-                      data.hasLogin
-                        ? "border-brand-500 bg-brand-600/10 text-white shadow-lg shadow-brand-500/5 scale-[1.01]"
-                        : "border-surface-800 bg-surface-900/40 text-surface-400 hover:border-surface-700 hover:text-surface-200"
-                    }`}
-                  >
-                    <div className={`p-3 rounded-xl shrink-0 ${data.hasLogin ? "bg-brand-500/20 text-brand-300" : "bg-surface-800 text-surface-500"}`}>
-                      <Lock className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <p className="font-semibold font-display text-white text-sm">Ya (Form Login Custom - Multi Role)</p>
-                      <p className="text-xs text-surface-400 mt-1 leading-relaxed">
-                        Membatasi akses menggunakan Form Login (Username & Password) dari Google Sheets, mendukung multi-role (Admin, Guru, Siswa, dll).
-                      </p>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Optional Roles list input */}
-                {data.hasLogin && (
-                  <div className="pt-2 animate-fade-up space-y-2">
-                    <label className="block text-xs font-semibold text-brand-300 uppercase tracking-wide">
-                      Daftar Role Pengguna (Pisahkan dengan koma)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: Admin, Guru, Siswa (kosongkan jika tidak ada pembagian role)"
-                      value={data.loginAccess}
-                      onChange={(e) => updateData({ loginAccess: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition input-premium"
-                    />
-                    <p className="text-xs text-surface-500 leading-relaxed">
-                      Tulis daftar role/hak akses yang dibutuhkan untuk aplikasi ini. Sistem akan otomatis membuat kolom Role pada sheet database dan menyesuaikan tampilan menu berdasarkan role login pengguna.
-                    </p>
-                  </div>
-                )}
-              </div>
+        {/* Generate Button Sticky Bottom */}
+        <div className="p-6 bg-surface-900 border-t border-surface-800 sticky bottom-0">
+           {profile && (
+            <div className="flex items-center justify-between mb-4 text-xs text-surface-400">
+              <span>Sisa Kuota: {Math.max(0, profile.quotaLimit - profile.quotaUsed)}/{profile.quotaLimit}</span>
+              <span className="uppercase text-[10px] font-bold tracking-wider text-brand-400">{profile.plan} Plan</span>
             </div>
           )}
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="btn-primary w-full !py-4 text-base font-bold shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all flex items-center justify-center gap-2 rounded-xl"
+            style={{ backgroundColor: activeColor }}
+          >
+            {generating ? (
+              <><div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Merakit Aplikasi...</>
+            ) : (
+              <><Sparkles className="h-5 w-5" /> Generate App</>
+            )}
+          </button>
+        </div>
+      </div>
 
-          {/* ═══ STEP 2: Menu & Fitur ═══ */}
-          {step === 1 && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-1">Menu & Fitur</h2>
-                  <p className="text-sm text-surface-400">Tentukan menu-menu utama aplikasi Anda (min. 1, maks. 10).</p>
-                </div>
-                <button
-                  onClick={addMenu}
-                  disabled={data.menus.length >= 10}
-                  className="btn-primary !py-2 !px-3 flex items-center gap-1 text-sm disabled:opacity-40"
-                >
-                  <Plus className="h-4 w-4" /> Tambah
-                </button>
+      {/* ─── MAIN CANVAS: VISUAL BUILDER ─── */}
+      <div className="flex-1 relative bg-[url('/grid.svg')] bg-center bg-repeat bg-surface-950 flex flex-col p-4 md:p-8 overflow-hidden">
+        {/* Preview controls */}
+        <div className="absolute top-4 right-4 z-10 flex bg-surface-900 border border-surface-700 rounded-lg p-1 shadow-lg">
+          <button 
+            onClick={() => setPreviewMode("desktop")}
+            className={`p-1.5 rounded-md transition-colors ${previewMode === "desktop" ? "bg-surface-700 text-white" : "text-surface-400 hover:text-white"}`}
+          >
+            <Monitor className="h-4 w-4" />
+          </button>
+          <button 
+            onClick={() => setPreviewMode("mobile")}
+            className={`p-1.5 rounded-md transition-colors ${previewMode === "mobile" ? "bg-surface-700 text-white" : "text-surface-400 hover:text-white"}`}
+          >
+            <Smartphone className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* The Mockup Frame */}
+        <div className={`mx-auto transition-all duration-500 ease-in-out flex flex-col bg-white overflow-hidden shadow-2xl rounded-2xl ring-1 ring-surface-800/50 ${
+          previewMode === "mobile" ? "w-full max-w-[375px] h-[812px]" : "w-full max-w-5xl h-full min-h-[600px]"
+        }`}>
+          
+          {/* Mockup Header */}
+          <div className="h-14 shrink-0 flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 text-white transition-colors duration-500" style={{ backgroundColor: activeColor }}>
+            <div className="flex items-center gap-3">
+              {previewMode === "mobile" && <MoreVertical className="h-5 w-5 opacity-70" />}
+              <div className="font-bold text-lg tracking-tight font-display drop-shadow-sm truncate max-w-[200px] sm:max-w-md">
+                {data.appName}
               </div>
+            </div>
+            <div className="flex items-center gap-3 opacity-90">
+              <Bell className="h-4 w-4 hidden sm:block" />
+              <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/30">
+                <Users className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
 
-              {data.menus.map((menu, mi) => (
-                <div key={mi} className="glass-light rounded-xl p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-brand-300">
-                      Menu #{mi + 1}
-                    </span>
+          <div className="flex flex-1 overflow-hidden relative text-slate-800 bg-slate-50">
+            {/* Mockup Sidebar (Navigation) */}
+            <div className={`${previewMode === "mobile" ? "hidden" : "w-64"} shrink-0 border-r border-slate-200 bg-white flex flex-col`}>
+              <div className="p-4 border-b border-slate-100">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input type="text" placeholder="Search..." disabled className="w-full pl-9 pr-3 py-2 bg-slate-100 rounded-lg text-sm text-slate-500 border-none outline-none" />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                <div className="text-xs font-semibold text-slate-400 mb-3 px-3 uppercase tracking-wider">Main Menu</div>
+                {data.menus.map((menu, idx) => (
+                  <div key={idx} className="group relative">
+                    <button
+                      onClick={() => setActiveMenuIndex(idx)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
+                        activeMenuIndex === idx 
+                        ? "bg-slate-100 text-slate-900 shadow-sm" 
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                    >
+                      <div style={{ color: activeMenuIndex === idx ? activeColor : "#64748b" }}>
+                        {renderMenuIcon(menu.icon, "h-4.5 w-4.5")}
+                      </div>
+                      <span className="truncate flex-1 text-left">{menu.name || "Menu Tanpa Nama"}</span>
+                    </button>
                     {data.menus.length > 1 && (
-                      <button
-                        onClick={() => removeMenu(mi)}
-                        className="text-red-400 hover:text-red-300 transition p-1"
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); removeMenu(idx); }}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity ${activeMenuIndex === idx ? "opacity-100" : ""}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </div>
-                  {/* Nama & Icon */}
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-surface-300 mb-1">
-                        Nama Menu <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder='Contoh: "Data Karyawan"'
-                        value={menu.name}
-                        onChange={(e) => updateMenu(mi, { name: e.target.value })}
-                        className="w-full px-3 py-2.5 rounded-lg bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-surface-300 mb-1.5">Ikon Menu</label>
-                      <div className="flex flex-wrap gap-2">
-                        {menuIconOptions.map((item) => {
-                          const IconComp = item.component;
-                          const isSelected = menu.icon === item.name || 
-                            (menu.icon === "📋" && item.name === "ClipboardList") ||
-                            (menu.icon === "👥" && item.name === "Users") ||
-                            (menu.icon === "📊" && item.name === "BarChart3") ||
-                            (menu.icon === "📦" && item.name === "Package") ||
-                            (menu.icon === "💰" && item.name === "DollarSign") ||
-                            (menu.icon === "📅" && item.name === "Calendar") ||
-                            (menu.icon === "🔔" && item.name === "Bell") ||
-                            (menu.icon === "📝" && item.name === "FileEdit") ||
-                            (menu.icon === "⚙️" && item.name === "Settings") ||
-                            (menu.icon === "🗂️" && item.name === "Folder") ||
-                            (menu.icon === "📈" && item.name === "TrendingUp") ||
-                            (menu.icon === "🏷️" && item.name === "Tag");
-                          return (
-                            <button
-                              key={item.name}
-                              type="button"
-                              onClick={() => updateMenu(mi, { icon: item.name })}
-                              title={item.label}
-                              className={`h-10 w-10 rounded-xl flex items-center justify-center transition border cursor-pointer ${
-                                isSelected
-                                  ? "bg-brand-600/20 border-brand-500 text-brand-300 shadow-md shadow-brand-500/10"
-                                  : "bg-surface-800/60 border-surface-700 text-surface-400 hover:text-white hover:bg-surface-700/60 hover:border-surface-600"
-                              }`}
-                            >
-                              <IconComp className="h-5 w-5" />
-                            </button>
-                          );
-                        })}
+                ))}
+              </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+                <button
+                  onClick={addMenu}
+                  disabled={data.menus.length >= 10}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-dashed border-slate-300 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 hover:border-slate-400 hover:bg-slate-50 transition-all disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" /> Tambah Menu
+                </button>
+              </div>
+            </div>
+
+            {/* Mockup Main Content (The Workspace) */}
+            <div className="flex-1 flex flex-col overflow-y-auto bg-slate-50">
+              {/* Toolbar */}
+              <div className="bg-white border-b border-slate-200 p-4 sm:px-8 py-5">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={activeMenu.name}
+                      onChange={(e) => updateMenu(activeMenuIndex, { name: e.target.value })}
+                      className="text-2xl font-bold text-slate-900 bg-transparent border-none p-0 focus:ring-0 focus:outline-none w-full mb-1 placeholder-slate-300 transition-colors hover:bg-slate-100 rounded px-1 -ml-1"
+                      placeholder="Nama Menu..."
+                    />
+                    <input
+                      type="text"
+                      value={activeMenu.description}
+                      onChange={(e) => updateMenu(activeMenuIndex, { description: e.target.value })}
+                      className="text-sm text-slate-500 bg-transparent border-none p-0 focus:ring-0 focus:outline-none w-full placeholder-slate-300 transition-colors hover:bg-slate-100 rounded px-1 -ml-1"
+                      placeholder="Deskripsi untuk menu ini..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative group">
+                      <button className="h-10 w-10 rounded-lg border border-slate-200 bg-white shadow-sm flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                        {renderMenuIcon(activeMenu.icon, "h-5 w-5")}
+                      </button>
+                      <div className="absolute right-0 top-12 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-2 hidden group-hover:grid grid-cols-4 gap-1 z-50">
+                         {menuIconOptions.map((item) => (
+                           <button
+                             key={item.name}
+                             onClick={() => updateMenu(activeMenuIndex, { icon: item.name })}
+                             className={`aspect-square rounded-lg flex items-center justify-center ${
+                               activeMenu.icon === item.name ? "bg-slate-100 ring-1 ring-slate-300 text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                             }`}
+                           >
+                             <item.component className="h-5 w-5" />
+                           </button>
+                         ))}
                       </div>
                     </div>
                   </div>
-                  {/* Deskripsi */}
-                  <div>
-                    <label className="block text-xs font-medium text-surface-300 mb-1">
-                      Deskripsi Fungsi <span className="text-red-400">*</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Jelaskan apa yang bisa dilakukan pengguna di menu ini."
-                      value={menu.description}
-                      onChange={(e) => updateMenu(mi, { description: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-lg bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-sm resize-none"
-                    />
-                  </div>
-                  {/* CRUD */}
-                  <div>
-                    <label className="block text-xs font-medium text-surface-300 mb-2">Operasi CRUD</label>
-                    <div className="flex flex-wrap gap-2">
+                </div>
+
+                {/* Simulated Actions Bar based on CRUD & Export */}
+                <div className="flex flex-wrap items-center gap-2 mt-6">
+                  {activeMenu.crud.create && (
+                    <button className="px-4 py-2 rounded-lg text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 flex items-center gap-2" style={{ backgroundColor: activeColor }}>
+                      <Plus className="h-4 w-4" /> Tambah Data
+                    </button>
+                  )}
+                  {activeMenu.hasFilter && (
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <input type="text" placeholder="Filter..." disabled className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-500 w-48 shadow-sm" />
+                    </div>
+                  )}
+                  <div className="flex-1" />
+                  {activeMenu.hasExport && (
+                    <button className="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 bg-white border border-slate-200 shadow-sm hover:bg-slate-50 flex items-center gap-2">
+                      <Download className="h-4 w-4" /> Export
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Data Table Workspace */}
+              <div className="p-4 sm:p-8 flex-1">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                  {/* CRUD Toggle Editor inside the table header */}
+                  <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <Database className="h-4 w-4 text-slate-400" /> 
+                      <span className="font-medium">Struktur Kolom Data</span>
+                    </div>
+                    
+                    <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm gap-1">
                       {(["create", "read", "update", "delete"] as const).map((op) => (
                         <button
                           key={op}
-                          onClick={() =>
-                            updateMenu(mi, {
-                              crud: { ...menu.crud, [op]: !menu.crud[op] },
-                            })
-                          }
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition inline-flex items-center gap-1.5 ${
-                            menu.crud[op]
-                              ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                              : "border-surface-700 text-surface-500 hover:border-surface-600"
+                          onClick={() => updateMenu(activeMenuIndex, { crud: { ...activeMenu.crud, [op]: !activeMenu.crud[op] } })}
+                          className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-all flex items-center gap-1.5 ${
+                            activeMenu.crud[op]
+                              ? "bg-slate-100 text-slate-800"
+                              : "text-slate-400 hover:text-slate-600"
                           }`}
                         >
-                          {op === "create" && <Plus className="h-3.5 w-3.5" />}
-                          {op === "create" && "Create"}
-                          {op === "read" && <Eye className="h-3.5 w-3.5" />}
-                          {op === "read" && "Read"}
-                          {op === "update" && <RefreshCw className="h-3.5 w-3.5" />}
-                          {op === "update" && "Update"}
-                          {op === "delete" && <Trash2 className="h-3.5 w-3.5" />}
-                          {op === "delete" && "Delete"}
+                          {op === "create" && <Plus className="h-3 w-3" />}
+                          {op === "read" && <Eye className="h-3 w-3" />}
+                          {op === "update" && <RefreshCw className="h-3 w-3" />}
+                          {op === "delete" && <Trash2 className="h-3 w-3" />}
+                          {op}
                         </button>
                       ))}
                     </div>
                   </div>
-                  {/* Filter & Export */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <button
-                          onClick={() => updateMenu(mi, { hasFilter: !menu.hasFilter })}
-                          className={`h-5 w-9 rounded-full transition-colors relative ${
-                            menu.hasFilter ? "bg-brand-500" : "bg-surface-700"
-                          }`}
-                        >
-                          <span
-                            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                              menu.hasFilter ? "translate-x-4" : "translate-x-0.5"
-                            }`}
-                          />
-                        </button>
-                        <span className="text-xs text-surface-300">Filter / Pencarian</span>
-                      </div>
-                      {menu.hasFilter && (
-                        <input
-                          type="text"
-                          placeholder="Filter berdasarkan kolom apa?"
-                          value={menu.filterColumns}
-                          onChange={(e) => updateMenu(mi, { filterColumns: e.target.value })}
-                          className="w-full px-3 py-2 rounded-lg bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-xs"
-                        />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <button
-                          onClick={() => updateMenu(mi, { hasExport: !menu.hasExport })}
-                          className={`h-5 w-9 rounded-full transition-colors relative ${
-                            menu.hasExport ? "bg-brand-500" : "bg-surface-700"
-                          }`}
-                        >
-                          <span
-                            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                              menu.hasExport ? "translate-x-4" : "translate-x-0.5"
-                            }`}
-                          />
-                        </button>
-                        <span className="text-xs text-surface-300">Export Data</span>
-                      </div>
-                      {menu.hasExport && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {exportFormatOptions.map((fmt) => (
-                            <button
-                              key={fmt}
-                              onClick={() => {
-                                const fmts = menu.exportFormats.includes(fmt)
-                                  ? menu.exportFormats.filter((f) => f !== fmt)
-                                  : [...menu.exportFormats, fmt];
-                                updateMenu(mi, { exportFormats: fmts });
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-xs border transition ${
-                                menu.exportFormats.includes(fmt)
-                                  ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                                  : "border-surface-700 text-surface-500"
-                              }`}
-                            >
-                              {fmt}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
 
-          {/* ═══ STEP 3: Struktur Data ═══ */}
-          {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">Struktur Data</h2>
-                <p className="text-sm text-surface-400">Definisikan kolom-kolom data untuk setiap sheet/tabel. Kolom ID akan otomatis ditambahkan.</p>
+                  {activeSheet ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm whitespace-nowrap">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium">
+                          <tr>
+                            <th className="px-4 py-3 w-10">No</th>
+                            <th className="px-4 py-3">Nama Kolom</th>
+                            <th className="px-4 py-3 w-32">Tipe Data</th>
+                            <th className="px-4 py-3 w-24 text-center">Wajib?</th>
+                            <th className="px-4 py-3 w-16"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {/* Auto Columns Preview */}
+                          {activeSheet.autoCreatedAt && (
+                            <tr className="bg-slate-50/50 opacity-60">
+                              <td className="px-4 py-3 text-center">-</td>
+                              <td className="px-4 py-3"><span className="flex items-center gap-2"><Lock className="h-3 w-3"/> createdAt (Otomatis)</span></td>
+                              <td className="px-4 py-3">Tanggal</td>
+                              <td className="px-4 py-3 text-center"><Check className="h-4 w-4 mx-auto text-slate-400" /></td>
+                              <td className="px-4 py-3"></td>
+                            </tr>
+                          )}
+                          {/* Editable Columns */}
+                          {activeSheet.columns.map((col, cIdx) => (
+                            <tr key={cIdx} className="group hover:bg-slate-50 transition-colors">
+                              <td className="px-4 py-3 text-slate-400 text-center">{cIdx + 1}</td>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="text"
+                                  value={col.name}
+                                  onChange={(e) => updateColumn(activeSheetIndex, cIdx, { name: e.target.value })}
+                                  placeholder="Nama Kolom"
+                                  className="w-full bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:border-slate-400 focus:outline-none transition-colors py-1"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                <select
+                                  value={col.type}
+                                  onChange={(e) => updateColumn(activeSheetIndex, cIdx, { type: e.target.value })}
+                                  className="w-full bg-transparent border-none text-slate-600 focus:ring-0 focus:outline-none cursor-pointer"
+                                >
+                                  {dataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  onClick={() => updateColumn(activeSheetIndex, cIdx, { required: !col.required })}
+                                  className={`h-5 w-5 rounded border flex items-center justify-center mx-auto transition-colors ${
+                                    col.required ? "bg-slate-800 border-slate-800 text-white" : "border-slate-300 text-transparent"
+                                  }`}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <button
+                                  onClick={() => removeColumn(activeSheetIndex, cIdx)}
+                                  disabled={activeSheet.columns.length <= 1}
+                                  className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-0"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="p-4 border-t border-slate-100">
+                        <button
+                          onClick={() => addColumn(activeSheetIndex)}
+                          className="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-2 py-1 transition-colors"
+                          style={{ color: activeColor }}
+                        >
+                          <Plus className="h-4 w-4" /> Tambah Kolom
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center">
+                      <Database className="h-12 w-12 text-slate-200 mb-3" />
+                      <p>Menu ini tidak memiliki form input atau data sheet.</p>
+                      <p className="text-sm mt-1">Aktifkan operasi Create/Update/Delete untuk memunculkan konfigurasi tabel.</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {data.sheets.map((sheet, si) => (
-                <div key={si} className="glass-light rounded-xl p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-brand-300 flex items-center gap-1.5">
-                      {(() => {
-                        const associatedMenu = data.menus.find((m) => m.name === sheet.menuName);
-                        const iconName = associatedMenu ? associatedMenu.icon : "Database";
-                        return renderMenuIcon(iconName, "h-4 w-4 text-brand-400 shrink-0");
-                      })()}
-                      {sheet.menuName}
-                    </span>
-                  </div>
-                  {/* Sheet Name */}
-                  <div>
-                    <label className="block text-xs font-medium text-surface-300 mb-1">
-                      Nama Sheet <span className="text-red-400">*</span>
-                    </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── ADVANCED SETTINGS MODAL ─── */}
+      {showAdvancedSettings && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-surface-900 h-full border-l border-surface-800 flex flex-col shadow-2xl animate-slide-in-right">
+            <div className="p-6 border-b border-surface-800 flex items-center justify-between bg-surface-950">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2"><Settings className="h-5 w-5"/> Pengaturan Lanjutan</h2>
+              <button onClick={() => setShowAdvancedSettings(false)} className="p-2 text-surface-400 hover:text-white rounded-lg hover:bg-surface-800 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-8 custom-scrollbar">
+              {/* Auth Settings */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand-400 uppercase tracking-wider flex items-center gap-2"><Lock className="h-4 w-4"/> Keamanan & Login</h3>
+                <div className="grid gap-3">
+                  <button
+                    onClick={() => updateData({ hasLogin: false })}
+                    className={`flex items-center gap-3 p-4 rounded-xl border text-left transition-all ${!data.hasLogin ? "border-brand-500 bg-brand-500/10" : "border-surface-700 bg-surface-800/50 hover:border-surface-600"}`}
+                  >
+                    <Unlock className={`h-5 w-5 ${!data.hasLogin ? "text-brand-400" : "text-surface-500"}`} />
+                    <div>
+                      <div className="text-sm font-semibold text-white">Publik (Tanpa Login)</div>
+                      <div className="text-xs text-surface-400 mt-0.5">Semua orang yang punya link bisa mengakses aplikasi.</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => updateData({ hasLogin: true })}
+                    className={`flex items-center gap-3 p-4 rounded-xl border text-left transition-all ${data.hasLogin ? "border-brand-500 bg-brand-500/10" : "border-surface-700 bg-surface-800/50 hover:border-surface-600"}`}
+                  >
+                    <Lock className={`h-5 w-5 ${data.hasLogin ? "text-brand-400" : "text-surface-500"}`} />
+                    <div>
+                      <div className="text-sm font-semibold text-white">Privat (Halaman Login)</div>
+                      <div className="text-xs text-surface-400 mt-0.5">Wajib login username/password yang diambil dari Sheet.</div>
+                    </div>
+                  </button>
+                </div>
+                {data.hasLogin && (
+                  <div className="mt-3 pl-4 border-l-2 border-brand-500/50 space-y-2 animate-fade-in">
+                    <label className="block text-xs font-medium text-surface-300">Daftar Role / Hak Akses (Pisahkan dengan koma)</label>
                     <input
                       type="text"
-                      value={sheet.sheetName}
-                      onChange={(e) => updateSheet(si, { sheetName: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-lg bg-surface-800/60 border border-surface-700 text-white focus:outline-none focus:border-brand-500 transition text-sm"
+                      placeholder="Admin, Guru, Siswa"
+                      value={data.loginAccess}
+                      onChange={(e) => updateData({ loginAccess: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-lg bg-surface-800 border border-surface-700 text-white focus:border-brand-500 text-sm"
                     />
                   </div>
-                  {/* Columns */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-medium text-surface-300">Kolom Data</label>
-                      <button onClick={() => addColumn(si)} className="text-brand-400 hover:text-brand-300 text-xs flex items-center gap-1">
-                        <Plus className="h-3 w-3" /> Tambah kolom
-                      </button>
-                    </div>
-                    <div className="space-y-4 md:space-y-2">
-                      {sheet.columns.map((col, ci) => (
-                        <div
-                          key={ci}
-                          className="flex flex-col md:grid md:grid-cols-[1.5fr_1.2fr_auto_2fr_auto] gap-2 items-stretch md:items-center border-b border-surface-800/60 md:border-b-0 pb-4 md:pb-0"
-                        >
-                          <input
-                            type="text"
-                            placeholder="Nama kolom"
-                            value={col.name}
-                            onChange={(e) => updateColumn(si, ci, { name: e.target.value })}
-                            className="px-3 py-2 rounded-lg bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-xs"
-                          />
-                          <select
-                            value={col.type}
-                            onChange={(e) => updateColumn(si, ci, { type: e.target.value })}
-                            className="px-2 py-2 rounded-lg bg-surface-800/60 border border-surface-700 text-white focus:outline-none focus:border-brand-500 transition text-xs"
-                          >
-                            {dataTypes.map((t) => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => updateColumn(si, ci, { required: !col.required })}
-                            title="Wajib diisi?"
-                            className={`px-3 py-2 rounded-lg text-xs border transition cursor-pointer ${
-                              col.required
-                                ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                                : "border-surface-700 text-surface-500 hover:border-surface-600"
-                            }`}
-                          >
-                            Wajib
-                          </button>
-                          <input
-                            type="text"
-                            placeholder="Catatan (opsional)"
-                            value={col.note}
-                            onChange={(e) => updateColumn(si, ci, { note: e.target.value })}
-                            className="px-3 py-2 rounded-lg bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-xs w-full md:w-auto"
-                          />
-                          {sheet.columns.length > 1 && (
-                            <button
-                              onClick={() => removeColumn(si, ci)}
-                              className="text-red-400 hover:text-red-300 p-2 md:p-1 flex items-center justify-center gap-1.5 border border-red-500/10 md:border-0 rounded-lg hover:bg-red-500/10 md:hover:bg-transparent text-xs md:text-inherit mt-1 md:mt-0 transition"
-                            >
-                              <Trash2 className="h-4 w-4 md:h-3.5 md:w-3.5" />
-                              <span className="md:hidden">Hapus Kolom</span>
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Auto columns */}
-                  <div>
-                    <label className="block text-xs font-medium text-surface-300 mb-2">Kolom Otomatis</label>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { key: "autoCreatedAt" as const, label: "createdAt" },
-                        { key: "autoUpdatedAt" as const, label: "updatedAt" },
-                        { key: "autoCreatedBy" as const, label: "createdBy (email)" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.key}
-                          onClick={() => updateSheet(si, { [opt.key]: !sheet[opt.key] })}
-                          className={`px-3 py-1.5 rounded-lg text-xs border transition inline-flex items-center gap-1.5 ${
-                            sheet[opt.key]
-                              ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                              : "border-surface-700 text-surface-500 hover:border-surface-600"
-                          }`}
-                        >
-                          {sheet[opt.key] ? (
-                            <Check className="h-3.5 w-3.5 text-brand-400" />
-                          ) : (
-                            <span className="h-3 w-3 border border-surface-600 rounded-sm" />
-                          )}
-                          <span>{opt.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ═══ STEP 4: Tampilan & UX ═══ */}
-          {step === 3 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">Tampilan & UX</h2>
-                <p className="text-sm text-surface-400">Atur preferensi visual dan fitur tambahan untuk aplikasi.</p>
-              </div>
-              {/* Color Theme */}
-              <div>
-                <label className="block text-sm font-medium text-surface-200 mb-2">Tema Warna</label>
-                <div className="flex flex-wrap gap-3">
-                  {colorPresets.map((cp) => (
-                    <button
-                      key={cp.name}
-                      onClick={() => updateData({ colorTheme: cp.name, customColor: cp.color || data.customColor })}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm border transition ${
-                        data.colorTheme === cp.name
-                          ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                          : "border-surface-700 bg-surface-800/40 text-surface-400 hover:border-surface-600"
-                      }`}
-                    >
-                      {cp.color && (
-                        <span className="h-4 w-4 rounded-full border border-white/20" style={{ background: cp.color }} />
-                      )}
-                      {cp.name}
-                    </button>
-                  ))}
-                </div>
-                {data.colorTheme === "Custom hex" && (
-                  <input
-                    type="text"
-                    placeholder="#6366f1"
-                    value={data.customColor}
-                    onChange={(e) => updateData({ customColor: e.target.value })}
-                    className="mt-3 px-4 py-2.5 rounded-xl bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-sm w-40"
-                  />
                 )}
               </div>
-              {/* Table Layout */}
-              <div>
-                <label className="block text-sm font-medium text-surface-200 mb-2">Tampilan Tabel Data</label>
-                <div className="flex flex-wrap gap-3">
-                  {tableLayouts.map((tl) => (
-                    <button
-                      key={tl}
-                      onClick={() => updateData({ tableLayout: tl })}
-                      className={`px-4 py-2.5 rounded-xl text-sm border transition ${
-                        data.tableLayout === tl
-                          ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                          : "border-surface-700 bg-surface-800/40 text-surface-400 hover:border-surface-600"
-                      }`}
-                    >
-                      {tl}
-                    </button>
-                  ))}
+
+              {/* Data & Scope */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand-400 uppercase tracking-wider flex items-center gap-2"><Database className="h-4 w-4"/> Infrastruktur</h3>
+                <div>
+                  <label className="block text-xs font-medium text-surface-300 mb-2">Sumber Data</label>
+                  <select
+                    value={data.dataSource}
+                    onChange={(e) => updateData({ dataSource: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-lg bg-surface-800 border border-surface-700 text-white focus:border-brand-500 text-sm"
+                  >
+                    {dataSourceOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-300 mb-2">Skala Pengguna</label>
+                  <select
+                    value={data.userType}
+                    onChange={(e) => updateData({ userType: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-lg bg-surface-800 border border-surface-700 text-white focus:border-brand-500 text-sm"
+                  >
+                    {userTypeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
               </div>
 
-              {/* Email Notif */}
-              <div className="glass-light rounded-xl p-5 space-y-3">
-                <div className="flex items-center gap-3">
+              {/* Extra Features */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-brand-400 uppercase tracking-wider flex items-center gap-2"><Sparkles className="h-4 w-4"/> Fitur Tambahan</h3>
+                <div className="space-y-2">
                   <button
                     onClick={() => updateData({ hasEmailNotif: !data.hasEmailNotif })}
-                    className={`h-5 w-9 rounded-full transition-colors relative ${
-                      data.hasEmailNotif ? "bg-brand-500" : "bg-surface-700"
-                    }`}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${data.hasEmailNotif ? "border-brand-500 bg-brand-500/10 text-white" : "border-surface-700 bg-surface-800/30 text-surface-400 hover:bg-surface-800"}`}
                   >
-                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${data.hasEmailNotif ? "translate-x-4" : "translate-x-0.5"}`} />
+                    <Mail className="h-4 w-4" />
+                    <span className="text-sm font-medium flex-1">Notifikasi Email Otomatis</span>
+                    <div className={`h-4 w-4 rounded-sm border flex items-center justify-center ${data.hasEmailNotif ? "bg-brand-500 border-brand-500" : "border-surface-600"}`}>
+                      {data.hasEmailNotif && <Check className="h-3 w-3 text-white" />}
+                    </div>
                   </button>
-                  <span className="text-sm text-surface-200">Notifikasi Email</span>
-                </div>
-                {data.hasEmailNotif && (
-                  <input
-                    type="text"
-                    placeholder="Event apa yang trigger notifikasi?"
-                    value={data.emailTrigger}
-                    onChange={(e) => updateData({ emailTrigger: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-lg bg-surface-800/60 border border-surface-700 text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition text-sm"
-                  />
-                )}
-              </div>
-              {/* Extra Features */}
-              <div>
-                <label className="block text-sm font-medium text-surface-200 mb-2">Fitur Tambahan</label>
-                <div className="space-y-2">
+                  {data.hasEmailNotif && (
+                    <input
+                      type="text"
+                      placeholder="Contoh: Saat data baru ditambahkan"
+                      value={data.emailTrigger}
+                      onChange={(e) => updateData({ emailTrigger: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-lg bg-surface-800 border border-surface-700 text-white focus:border-brand-500 text-sm animate-fade-in"
+                    />
+                  )}
+
+                  <div className="w-full h-px bg-surface-800 my-2" />
+                  
                   {extraFeaturesList.map((feat) => (
                     <button
                       key={feat}
@@ -943,170 +808,24 @@ export default function GeneratePage() {
                           : [...data.extraFeatures, feat];
                         updateData({ extraFeatures: ef });
                       }}
-                      className={`flex items-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm text-left border transition ${
-                        data.extraFeatures.includes(feat)
-                          ? "border-brand-500 bg-brand-600/15 text-brand-300"
-                          : "border-surface-700 bg-surface-800/40 text-surface-400 hover:border-surface-600"
-                      }`}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${data.extraFeatures.includes(feat) ? "border-brand-500 bg-brand-500/10 text-white" : "border-surface-700 bg-surface-800/30 text-surface-400 hover:bg-surface-800"}`}
                     >
-                      <span className={`h-4 w-4 rounded border flex items-center justify-center text-xs ${
-                        data.extraFeatures.includes(feat)
-                          ? "bg-brand-500 border-brand-500 text-white"
-                          : "border-surface-600"
-                      }`}>
-                        {data.extraFeatures.includes(feat) && <Check className="h-3 w-3" />}
-                      </span>
-                      {feat}
+                      <span className="text-sm font-medium flex-1">{feat}</span>
+                      <div className={`h-4 w-4 rounded-sm border flex items-center justify-center ${data.extraFeatures.includes(feat) ? "bg-brand-500 border-brand-500" : "border-surface-600"}`}>
+                        {data.extraFeatures.includes(feat) && <Check className="h-3 w-3 text-white" />}
+                      </div>
                     </button>
                   ))}
                 </div>
               </div>
             </div>
-          )}
-
-          {/* ═══ STEP 5: Review ═══ */}
-          {step === 4 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">Review & Generate</h2>
-                <p className="text-sm text-surface-400">Periksa kembali semua data sebelum generate prompt.</p>
-              </div>
-
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Identity */}
-                <div className="glass-light rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-brand-300 uppercase tracking-wide">Identitas</span>
-                    <button onClick={() => setStep(0)} className="text-xs text-brand-400 hover:underline">Edit</button>
-                  </div>
-                  <p className="text-white font-semibold">{data.appName || "-"}</p>
-                  <p className="text-xs text-surface-400 line-clamp-2">{data.appDescription || "-"}</p>
-                  <p className="text-xs text-surface-500">{data.dataSource} · {data.userType}</p>
-                </div>
-                {/* Menus */}
-                <div className="glass-light rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-brand-300 uppercase tracking-wide">Menu ({data.menus.length})</span>
-                    <button onClick={() => setStep(1)} className="text-xs text-brand-400 hover:underline">Edit</button>
-                  </div>
-                  {data.menus.map((m, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-sm text-surface-300">
-                      {renderMenuIcon(m.icon, "h-4 w-4 text-brand-400 shrink-0")}
-                      <span>{m.name || "Menu belum diberi nama"}</span>
-                    </div>
-                  ))}
-                </div>
-                {/* Data */}
-                <div className="glass-light rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-brand-300 uppercase tracking-wide">Data ({data.sheets.length} sheet)</span>
-                    <button onClick={() => setStep(2)} className="text-xs text-brand-400 hover:underline">Edit</button>
-                  </div>
-                  {data.sheets.map((s, i) => {
-                    const associatedMenu = data.menus.find((m) => m.name === s.menuName);
-                    const iconName = associatedMenu ? associatedMenu.icon : "Database";
-                    return (
-                      <div key={i} className="flex items-center gap-1.5 text-sm text-surface-300">
-                        {renderMenuIcon(iconName, "h-4 w-4 text-brand-400 shrink-0")}
-                        <span>{s.sheetName} — {s.columns.length} kolom</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Appearance */}
-                <div className="glass-light rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-brand-300 uppercase tracking-wide">Tampilan</span>
-                    <button onClick={() => setStep(3)} className="text-xs text-brand-400 hover:underline">Edit</button>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm text-surface-300">
-                    <Palette className="h-4 w-4 text-brand-400 shrink-0" />
-                    <span>Tema: {data.colorTheme}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm text-surface-300">
-                    <LayoutGrid className="h-4 w-4 text-brand-400 shrink-0" />
-                    <span>Layout: {data.tableLayout}</span>
-                  </div>
-                  {data.hasLogin && (
-                    <div className="flex items-center gap-1.5 text-sm text-surface-300">
-                      <Lock className="h-4 w-4 text-brand-400 shrink-0" />
-                      <span>Akses terbatas ({data.loginAccess || "Semua Akun Google"})</span>
-                    </div>
-                  )}
-                  {data.hasEmailNotif && (
-                    <div className="flex items-center gap-1.5 text-sm text-surface-300">
-                      <Mail className="h-4 w-4 text-brand-400 shrink-0" />
-                      <span>Notifikasi email: {data.emailTrigger}</span>
-                    </div>
-                  )}
-                  {data.extraFeatures.length > 0 && (
-                    <div className="flex items-center gap-1.5 text-sm text-surface-300">
-                      <Sparkles className="h-4 w-4 text-brand-400 shrink-0" />
-                      <span>{data.extraFeatures.length} fitur tambahan</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Quota info */}
-              {mounted && profile && (
-                <div className="glass-light rounded-xl p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-surface-300">Sisa kuota bulan ini</p>
-                    <p className="text-xl font-bold text-white">
-                      {Math.max(0, profile.quotaLimit - profile.quotaUsed)}{" "}
-                      <span className="text-sm text-surface-500 font-normal">/ {profile.quotaLimit}</span>
-                    </p>
-                  </div>
-                  <div className="text-xs text-surface-500 capitalize">
-                    Paket {profile.plan}
-                  </div>
-                </div>
-              )}
-
-              {/* Generate button */}
-              <button
-                onClick={handleGenerate}
-                disabled={generating}
-                className="btn-primary w-full !py-4 text-base flex items-center justify-center gap-2 animate-pulse-glow disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {generating ? (
-                  <>
-                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-5 w-5" />
-                    Generate Prompt
-                  </>
-                )}
-              </button>
+            
+            <div className="p-6 border-t border-surface-800 bg-surface-950">
+              <button onClick={() => setShowAdvancedSettings(false)} className="btn-primary w-full py-3">Simpan Pengaturan</button>
             </div>
-          )}
-
-          {/* ─── Nav Buttons ─── */}
-          {step < 4 && (
-            <div className="flex items-center justify-between mt-8 pt-6 border-t border-surface-700/50">
-              <button
-                onClick={goBack}
-                disabled={step === 0}
-                className="btn-ghost flex items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="h-4 w-4" /> Kembali
-              </button>
-              <button
-                onClick={goNext}
-                disabled={!canNext()}
-                className="btn-primary flex items-center gap-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Lanjut <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ─── Quota Modal ─── */}
       {showQuotaModal && (
@@ -1132,6 +851,7 @@ export default function GeneratePage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
