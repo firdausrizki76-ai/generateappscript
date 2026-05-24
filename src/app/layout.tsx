@@ -34,7 +34,7 @@ export default function RootLayout({
         <Footer />
         <Script
           src={
-            process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === "true"
+            process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION?.toLowerCase() === "true"
               ? "https://app.midtrans.com/snap/snap.js"
               : "https://app.sandbox.midtrans.com/snap/snap.js"
           }

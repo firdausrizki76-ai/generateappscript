@@ -124,6 +124,9 @@ export function buildPrompt(data: WizardData): string {
   const themeColor = data.colorTheme === "Custom hex" ? data.customColor : (themeColors[data.colorTheme] || data.colorTheme);
   ln(`- **Tema Warna Utama:** ${data.colorTheme} → \`${themeColor}\` (gunakan variasi gradien dari warna ini untuk aksen, background active states, dan komponen utama).`);
   ln(`- **Layout Tabel:** ${data.tableLayout}`);
+  ln(`- **Aturan Komunikasi Client-Server (PENTING):**`);
+  ln(`  - **DILARANG** menggunakan \`fetch\`, \`axios\`, atau \`XMLHttpRequest\` untuk memanggil backend Apps Script (seperti memanggil web app URL / \`doGet\` endpoint).`);
+  ln(`  - Semua pemanggilan fungsi dari HTML (\`index.html\`) ke backend (\`code.gs\`) **WAJIB** menggunakan \`google.script.run\` secara asinkron dengan handler sukses (\`.withSuccessHandler()\`) dan gagal (\`.withFailureHandler()\`).`);
   ln();
 
   ln(`### Komponen UI yang wajib ada:`);
@@ -278,6 +281,7 @@ export function buildPrompt(data: WizardData): string {
   ln(`- [ ] Semua nama Sheet di kode cocok PERSIS dengan nama sheet di Spreadsheet`);
   ln(`- [ ] Semua nama function di \`google.script.run\` cocok PERSIS dengan function di \`code.gs\``);
   ln(`- [ ] Setiap \`google.script.run\` menggunakan \`.withSuccessHandler()\` DAN \`.withFailureHandler()\``);
+  ln(`- [ ] DILARANG KERAS menggunakan \`fetch\`, \`axios\`, atau \`XMLHttpRequest\` untuk memanggil backend Apps Script (seluruh data transfer harus lewat google.script.run).`);
   ln(`- [ ] Tidak ada operasi synchronous/blocking di client-side`);
   ln(`- [ ] Validasi dilakukan di KEDUA sisi (client + server)`);
   ln(`- [ ] UUID/ID generation menggunakan \`Utilities.getUuid()\``);

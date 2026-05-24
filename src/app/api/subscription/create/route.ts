@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     const orderId = `SUB-${user.id.substring(0, 8)}-${Date.now()}`;
 
     // 4. Request transaction token from Midtrans Snap API
-    const isProduction = process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === "true";
+    const isProduction = process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION?.toLowerCase() === "true";
     const midtransUrl = isProduction
       ? "https://app.midtrans.com/snap/v1/transactions"
       : "https://app.sandbox.midtrans.com/snap/v1/transactions";

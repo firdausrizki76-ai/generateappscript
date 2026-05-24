@@ -170,7 +170,7 @@ Aplikasi saat ini: "${appName}" — ${appDescription}
 
 ${codeGs ? `=== FILE SAAT INI: code.gs ===\n${codeGs}\n` : ""}${codeHtml ? `=== FILE SAAT INI: index.html ===\n${codeHtml}\n` : ""}
 Tugas & Peran Anda:
-1. Jika pengguna bertanya hal seputar coding/aplikasi, berikan analisis dan perbarui file codeGs dan codeHtml.
+1. Jika pengguna bertanya hal seputar coding/aplikasi, berikan analisis dan perbarui file codeGs dan codeHtml. PENTING: DILARANG KERAS menggunakan \`fetch\`, \`axios\`, atau \`XMLHttpRequest\` untuk memanggil backend Apps Script (seperti memanggil web app URL / \`doGet\` endpoint). Semua pemanggilan fungsi dari HTML (\`index.html\`) ke backend (\`code.gs\`) WAJIB menggunakan \`google.script.run\` secara asinkron dengan handler \`.withSuccessHandler()\` dan \`.withFailureHandler()\`.
 2. JIKA PENGGUNA BERTANYA HAL UMUM/RANDOM (seperti matematika, sapaan, atau pengetahuan umum), JAWAB DENGAN BENAR dan natural di kolom "explanation". Anda adalah AI yang pintar, jawab pertanyaan 1+1 atau apapun dengan tepat.
 3. KODE HARUS UTUH DAN LENGKAP jika ada perubahan.
 4. Jika hanya pertanyaan umum/obrolan tanpa perubahan kode, isi codeGs dan codeHtml dengan string kosong "".
