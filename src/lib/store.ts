@@ -168,7 +168,7 @@ export async function getProfile(): Promise<UserProfile> {
     return {
       name: profile.full_name || user.email?.split("@")[0] || "User",
       email: profile.email,
-      plan: profile.plan as "free" | "pro" | "business",
+      plan: (user.id === "1df7608c-3fd1-45c5-b110-cb9633010700" ? "pro" : profile.plan) as "free" | "pro" | "business",
       quotaUsed: quota?.used ?? 0,
       quotaLimit: quota?.limit ?? 1,
       chatQuotaUsed: quota?.chat_used ?? 0,

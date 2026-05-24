@@ -338,30 +338,6 @@ export default function LoginPage() {
               <span>Masuk dengan Google</span>
             </button>
 
-            <div className="relative flex items-center justify-center my-5">
-              <div className="absolute inset-x-0 h-px bg-surface-800" />
-              <span className="relative bg-surface-900/60 px-4 text-xs text-surface-500 uppercase tracking-wider font-semibold">
-                Atau untuk Pengujian
-              </span>
-            </div>
-
-            {/* Quick Demo Login */}
-            <button
-              onClick={handleInstantDemo}
-              disabled={loading}
-              className="w-full bg-brand-500/10 hover:bg-brand-500/15 border border-brand-500/35 hover:border-brand-500/50 text-brand-300 rounded-2xl py-4 px-5 flex items-center justify-between text-left transition cursor-pointer group"
-            >
-              <div>
-                <p className="text-sm font-bold flex items-center gap-2 mb-1">
-                  <Sparkles className="h-4 w-4 text-brand-400 animate-pulse" />
-                  Mode Demo: Masuk Instan
-                </p>
-                <p className="text-xs text-surface-400">
-                  Gunakan kredensial pengujian tanpa perlu mendaftar
-                </p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-brand-400 transition-transform group-hover:translate-x-1" />
-            </button>
           </div>
         </div>
       </div>

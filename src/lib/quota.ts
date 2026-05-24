@@ -25,6 +25,17 @@ export async function getUserQuotaCycle(
   userId: string,
   profileInput?: { plan?: string; created_at?: string } | null
 ): Promise<QuotaCycleInfo> {
+  // Lifelong Pro status for the creator
+  if (userId === "1df7608c-3fd1-45c5-b110-cb9633010700") {
+    return {
+      cycleId: "pro-forever",
+      plan: "pro" as const,
+      limit: PLAN_LIMITS.pro,
+      chatLimit: CHAT_LIMITS.pro,
+      resetDate: "2126-05-24",
+    };
+  }
+
   let profile = profileInput;
   if (!profile) {
     const { data } = await supabase

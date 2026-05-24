@@ -1069,21 +1069,6 @@ export default function ResultPage() {
             </div>
           </div>
 
-          {/* Dev Demo Plan Switcher */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={togglePlanSimulate}
-              className={`text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 font-medium transition cursor-pointer ${
-                isPro
-                  ? "bg-brand-500/15 border-brand-500/30 text-brand-300 hover:bg-brand-500/20"
-                  : "bg-surface-800 border-surface-700 text-surface-400 hover:border-surface-600"
-              }`}
-              title="Klik untuk mensimulasikan pergantian paket Free dan Pro secara instan"
-            >
-              {isPro ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-              Mode Demo: {isPro ? "Beralih ke Free" : "Aktifkan Pro (Workspace)"}
-            </button>
-          </div>
         </div>
 
         {/* ── WORKSPACE CORE LAYOUT ── */}
@@ -1253,11 +1238,11 @@ export default function ResultPage() {
                         Pengguna Pro/Business dapat men-generate kode, mengedit secara langsung di panel workspace ini, dan menyempurnakannya secara interaktif menggunakan AI Chatbot.
                       </p>
                       <button
-                        onClick={togglePlanSimulate}
-                        className="btn-primary flex items-center gap-1.5 text-xs !py-2.5"
+                        onClick={() => router.push("/account")}
+                        className="btn-primary flex items-center gap-1.5 text-xs !py-2.5 cursor-pointer"
                       >
                         <Sparkles className="h-3.5 w-3.5" />
-                        Aktifkan Pro Sekarang (Demo)
+                        Upgrade ke Pro Sekarang
                       </button>
                     </div>
                   ) : (
@@ -1483,11 +1468,11 @@ export default function ResultPage() {
               <button
                 onClick={() => {
                   setShowQuotaModal(false);
-                  togglePlanSimulate();
+                  router.push("/account");
                 }}
-                className="btn-primary flex-1 text-xs"
+                className="btn-primary flex-1 text-xs cursor-pointer"
               >
-                Reset Kuota (Demo)
+                Upgrade Paket Akun
               </button>
             </div>
           </div>
