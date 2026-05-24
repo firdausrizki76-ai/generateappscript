@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, ArrowRight, Sparkles, AlertCircle, Eye, EyeOff } from "lucide-react";
-import { loginWithEmail, signUpWithEmail, signInDemoUser, isLoggedIn, loginWithGoogle } from "@/lib/store";
+import { loginWithEmail, signUpWithEmail, isLoggedIn, loginWithGoogle } from "@/lib/store";
 import { AppsScriptLogo } from "@/components/logo";
 
 export default function LoginPage() {
@@ -33,19 +33,6 @@ export default function LoginPage() {
       </div>
     );
   }
-
-  const handleInstantDemo = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      await signInDemoUser();
-      router.push("/dashboard");
-      router.refresh();
-    } catch (err: any) {
-      setError(err.message || "Gagal masuk mode demo.");
-      setLoading(false);
-    }
-  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);

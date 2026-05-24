@@ -174,23 +174,6 @@ export default function ResultPage() {
     }
   };
 
-  const togglePlanSimulate = async () => {
-    if (!profile) return;
-    const nextPlan = profile.plan === "free" ? "pro" : "free";
-    const nextQuotaLimit = nextPlan === "free" ? 1 : 10;
-    const nextChatLimit = nextPlan === "free" ? 0 : 50;
-
-    const updated: UserProfile = {
-      ...profile,
-      plan: nextPlan,
-      quotaLimit: nextQuotaLimit,
-      chatQuotaLimit: nextChatLimit,
-      chatQuotaUsed: 0,
-    };
-    await saveProfile(updated);
-    setProfile(updated);
-  };
-
   const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
