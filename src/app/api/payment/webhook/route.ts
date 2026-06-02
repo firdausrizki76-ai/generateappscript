@@ -5,6 +5,8 @@ import crypto from "crypto";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    console.log("Midtrans webhook received payload:", JSON.stringify(body, null, 2));
+
     const {
       order_id,
       status_code,
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
 
     if (computedSignature !== signature_key) {
       console.warn("Invalid webhook signature key from Midtrans. Computed:", computedSignature, "Received:", signature_key);
+      console.warn("Raw signature payload used for computation (length: " + rawSignaturePayload.length + "):", rawSignaturePayload);
       return NextResponse.json(
         { success: false, error: "Autentikasi signature tidak valid." },
         { status: 401 }
