@@ -32,7 +32,39 @@ export async function POST(req: Request) {
       .update(rawSignaturePayload)
       .digest("hex");
 
-    if (computedSignature !== signature_key) {
+    let isSignatureValid = (computedSignature === signature_key);
+
+    // Fallback 1: Format to 2 decimal places (e.g. "60000.00")
+    if (!isSignatureValid) {
+      const fallbackAmount2Dec = Number(gross_amount).toFixed(2);
+      const rawFallbackPayload = order_id + status_code + fallbackAmount2Dec + serverKey;
+      const fallbackSignature = crypto
+        .createHash("sha512")
+        .update(rawFallbackPayload)
+        .digest("hex");
+      
+      if (fallbackSignature === signature_key) {
+        isSignatureValid = true;
+        console.log("Signature validated using fallback (2 decimal places format).");
+      }
+    }
+
+    // Fallback 2: Format to integer (e.g. "60000")
+    if (!isSignatureValid) {
+      const fallbackAmountInt = Math.round(Number(gross_amount)).toString();
+      const rawFallbackPayload = order_id + status_code + fallbackAmountInt + serverKey;
+      const fallbackSignature = crypto
+        .createHash("sha512")
+        .update(rawFallbackPayload)
+        .digest("hex");
+      
+      if (fallbackSignature === signature_key) {
+        isSignatureValid = true;
+        console.log("Signature validated using fallback (integer format).");
+      }
+    }
+
+    if (!isSignatureValid) {
       console.warn("Invalid webhook signature key from Midtrans. Computed:", computedSignature, "Received:", signature_key);
       console.warn("Raw signature payload used for computation (length: " + rawSignaturePayload.length + "):", rawSignaturePayload);
       return NextResponse.json(
