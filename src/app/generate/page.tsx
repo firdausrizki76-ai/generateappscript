@@ -771,12 +771,12 @@ export default function GeneratePage() {
                 </div>
 
                 {activeBuilderTab === "canvas" && (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  <div className="flex flex-col gap-6">
                     
-                    {/* Left Column: UI Components Toolbox */}
-                    <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-4">
-                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Komponen UI</div>
-                      <div className="grid grid-cols-1 gap-2">
+                    {/* Top Toolbar: UI Components Selector */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Tambah Komponen Tampilan</div>
+                      <div className="flex flex-wrap gap-2.5">
                         {[
                           { type: "heading", label: "Heading / Judul", icon: FileText },
                           { type: "paragraph", label: "Paragraph Teks", icon: FileEdit },
@@ -792,331 +792,329 @@ export default function GeneratePage() {
                           <button
                             key={c.type}
                             onClick={() => addUIComponent(c.type as UIComponent["type"])}
-                            className="flex items-center gap-3 p-2.5 rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 text-left transition-all text-xs font-semibold text-slate-700 w-full cursor-pointer"
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all text-xs font-semibold text-slate-700 cursor-pointer"
                           >
-                            <div className="h-7 w-7 rounded bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                              <c.icon className="h-4 w-4" />
-                            </div>
+                            <c.icon className="h-4.5 w-4.5 text-slate-500 shrink-0" />
                             <span>{c.label}</span>
                           </button>
                         ))}
                       </div>
                     </div>
 
-                    {/* Middle Column: Canvas Preview */}
-                    <div className="lg:col-span-6 space-y-4 min-h-[400px] p-4 bg-slate-100/50 rounded-2xl border border-slate-200 border-dashed">
-                      {(!activeMenu.layoutComponents || activeMenu.layoutComponents.length === 0) ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 gap-3">
-                          <Palette className="h-10 w-10 text-slate-300 animate-pulse" />
-                          <div className="text-sm font-semibold">Canvas Kosong</div>
-                          <div className="text-xs">Klik komponen di sebelah kiri untuk mulai mendesain tampilan halaman ini.</div>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-12 gap-3">
-                          {(activeMenu.layoutComponents || []).map((comp, idx) => {
-                            const isSelected = selectedComponentId === comp.id;
-                            return (
-                              <div
-                                key={comp.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedComponentId(comp.id);
-                                }}
-                                className={`relative group p-4 bg-white rounded-xl border transition-all cursor-pointer ${
-                                  comp.width || "col-12"
-                                } ${
-                                  isSelected
-                                    ? "border-brand-500 ring-2 ring-brand-500/20 shadow-md scale-[1.01]"
-                                    : "border-slate-200 hover:border-slate-400 shadow-sm"
-                                }`}
-                              >
-                                {/* Drag/Hover Actions Overlay */}
-                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center bg-slate-900/90 text-white rounded-lg p-0.5 shadow-lg z-10 gap-0.5">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveUIComponent(idx, "up");
-                                    }}
-                                    disabled={idx === 0}
-                                    className="p-1 rounded hover:bg-white/20 disabled:opacity-20 cursor-pointer"
-                                    title="Pindahkan Ke Atas"
-                                  >
-                                    <ChevronUp className="h-3 w-3" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveUIComponent(idx, "down");
-                                    }}
-                                    disabled={idx === (activeMenu.layoutComponents || []).length - 1}
-                                    className="p-1 rounded hover:bg-white/20 disabled:opacity-20 cursor-pointer"
-                                    title="Pindahkan Ke Bawah"
-                                  >
-                                    <ChevronDown className="h-3 w-3" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteUIComponent(comp.id);
-                                    }}
-                                    className="p-1 rounded hover:bg-red-500/30 text-red-400 cursor-pointer"
-                                    title="Hapus Elemen"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </div>
-
-                                {/* Component Layout Representation */}
-                                <div className="space-y-1.5 pointer-events-none">
-                                  <div className="flex justify-between items-center mb-1">
-                                    <span className="text-[9px] uppercase tracking-wider bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-bold">
-                                      {comp.type}
-                                    </span>
-                                    <span className="text-[9px] text-slate-400 font-medium">
-                                      {comp.width === "col-12" ? "Lebar Penuh" : comp.width === "col-6" ? "Setengah" : comp.width === "col-4" ? "1/3 Grid" : "1/4 Grid"}
-                                    </span>
+                    {/* Bottom Split Layout: Canvas (left/middle) & Inspector (right) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                      
+                      {/* Left: Canvas Preview */}
+                      <div className={`${selectedComponentId ? "lg:col-span-8" : "lg:col-span-12"} space-y-4 min-h-[400px] p-4 bg-slate-100/50 rounded-2xl border border-slate-200 border-dashed transition-all`}>
+                        {(!activeMenu.layoutComponents || activeMenu.layoutComponents.length === 0) ? (
+                          <div className="flex flex-col items-center justify-center py-20 text-center text-slate-400 gap-3">
+                            <Palette className="h-10 w-10 text-slate-300 animate-pulse" />
+                            <div className="text-sm font-semibold">Canvas Kosong</div>
+                            <div className="text-xs">Klik komponen di toolbar atas untuk mulai mendesain tampilan halaman ini.</div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-12 gap-3">
+                            {(activeMenu.layoutComponents || []).map((comp, idx) => {
+                              const isSelected = selectedComponentId === comp.id;
+                              return (
+                                <div
+                                  key={comp.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedComponentId(comp.id);
+                                  }}
+                                  className={`relative group p-4 bg-white rounded-xl border transition-all cursor-pointer ${
+                                    comp.width === "col-6" ? "col-span-6" : comp.width === "col-4" ? "col-span-4" : comp.width === "col-3" ? "col-span-3" : "col-span-12"
+                                  } ${
+                                    isSelected
+                                      ? "border-brand-500 ring-2 ring-brand-500/20 shadow-md scale-[1.01]"
+                                      : "border-slate-200 hover:border-slate-400 shadow-sm"
+                                  }`}
+                                >
+                                  {/* Drag/Hover Actions Overlay */}
+                                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center bg-slate-900/90 text-white rounded-lg p-0.5 shadow-lg z-10 gap-0.5">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        moveUIComponent(idx, "up");
+                                      }}
+                                      disabled={idx === 0}
+                                      className="p-1 rounded hover:bg-white/20 disabled:opacity-20 cursor-pointer"
+                                      title="Pindahkan Ke Atas"
+                                    >
+                                      <ChevronUp className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        moveUIComponent(idx, "down");
+                                      }}
+                                      disabled={idx === (activeMenu.layoutComponents || []).length - 1}
+                                      className="p-1 rounded hover:bg-white/20 disabled:opacity-20 cursor-pointer"
+                                      title="Pindahkan Ke Bawah"
+                                    >
+                                      <ChevronDown className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteUIComponent(comp.id);
+                                      }}
+                                      className="p-1 rounded hover:bg-red-500/30 text-red-400 cursor-pointer"
+                                      title="Hapus Elemen"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
                                   </div>
 
-                                  {comp.type === "heading" && (
-                                    <h4 className="text-base font-bold text-slate-800">{comp.label}</h4>
-                                  )}
+                                  {/* Component Layout Representation */}
+                                  <div className="space-y-1.5 pointer-events-none">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <span className="text-[9px] uppercase tracking-wider bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-bold">
+                                        {comp.type}
+                                      </span>
+                                      <span className="text-[9px] text-slate-400 font-medium">
+                                        {comp.width === "col-12" ? "Lebar Penuh" : comp.width === "col-6" ? "Setengah" : comp.width === "col-4" ? "1/3 Grid" : "1/4 Grid"}
+                                      </span>
+                                    </div>
 
-                                  {comp.type === "paragraph" && (
-                                    <p className="text-xs text-slate-500 leading-relaxed">{comp.label}</p>
-                                  )}
+                                    {comp.type === "heading" && (
+                                      <h4 className="text-base font-bold text-slate-800">{comp.label}</h4>
+                                    )}
 
-                                  {["input", "textarea", "select", "date"].includes(comp.type) && (
-                                    <div className="space-y-1 w-full">
-                                      <label className="block text-[11px] font-bold text-slate-700">
-                                        {comp.label}{comp.required && <span className="text-red-500"> *</span>}
-                                      </label>
-                                      <div className="bg-slate-50 border border-slate-200 text-slate-400 rounded-lg p-2 text-xs truncate">
-                                        {comp.placeholder || `Input ${comp.type}...`}
-                                      </div>
-                                      {comp.associatedColumn && (
-                                        <div className="text-[9px] text-brand-600 font-semibold bg-brand-50/50 px-1.5 py-0.5 rounded w-max">
-                                          Database: {comp.associatedColumn}
+                                    {comp.type === "paragraph" && (
+                                      <p className="text-xs text-slate-500 leading-relaxed">{comp.label}</p>
+                                    )}
+
+                                    {["input", "textarea", "select", "date"].includes(comp.type) && (
+                                      <div className="space-y-1 w-full">
+                                        <label className="block text-[11px] font-bold text-slate-700">
+                                          {comp.label}{comp.required && <span className="text-red-500"> *</span>}
+                                        </label>
+                                        <div className="bg-slate-50 border border-slate-200 text-slate-400 rounded-lg p-2 text-xs truncate">
+                                          {comp.placeholder || `Input ${comp.type}...`}
                                         </div>
-                                      )}
-                                    </div>
-                                  )}
+                                        {comp.associatedColumn && (
+                                          <div className="text-[9px] text-brand-600 font-semibold bg-brand-50/50 px-1.5 py-0.5 rounded w-max">
+                                            Database: {comp.associatedColumn}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
 
-                                  {comp.type === "button" && (
-                                    <div className="w-full text-center py-2 rounded-lg text-xs font-bold text-white shadow-sm" style={{ backgroundColor: activeColor }}>
-                                      {comp.label}
-                                    </div>
-                                  )}
-
-                                  {comp.type === "table" && (
-                                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-full">
-                                      <div className="bg-slate-100 p-2 text-[10px] font-bold text-slate-600 border-b border-slate-200">
+                                    {comp.type === "button" && (
+                                      <div className="w-full text-center py-2 rounded-lg text-xs font-bold text-white shadow-sm" style={{ backgroundColor: activeColor }}>
                                         {comp.label}
                                       </div>
-                                      <div className="p-3 text-[10px] text-slate-400 text-center italic">
-                                        [Tabel Data]
-                                      </div>
-                                    </div>
-                                  )}
+                                    )}
 
-                                  {comp.type === "chart" && (
-                                    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3 w-full">
-                                      <BarChart3 className="h-6 w-6 text-slate-400" />
-                                      <div>
-                                        <div className="text-xs font-bold text-slate-700">{comp.label}</div>
-                                        <div className="text-[9px] text-slate-400 capitalize">Tipe: {comp.chartType || "bar"}</div>
+                                    {comp.type === "table" && (
+                                      <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-full">
+                                        <div className="bg-slate-100 p-2 text-[10px] font-bold text-slate-600 border-b border-slate-200">
+                                          {comp.label}
+                                        </div>
+                                        <div className="p-3 text-[10px] text-slate-400 text-center italic">
+                                          [Tabel Data]
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
+                                    )}
 
-                                  {comp.type === "kpi" && (
-                                    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3 w-full">
-                                      <TrendingUp className="h-6 w-6 text-slate-400" />
-                                      <div>
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">{comp.label}</div>
-                                        <div className="text-lg font-black text-slate-700">-</div>
+                                    {comp.type === "chart" && (
+                                      <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3 w-full">
+                                        <BarChart3 className="h-6 w-6 text-slate-400" />
+                                        <div>
+                                          <div className="text-xs font-bold text-slate-700">{comp.label}</div>
+                                          <div className="text-[9px] text-slate-400 capitalize">Tipe: {comp.chartType || "bar"}</div>
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
+                                    )}
+
+                                    {comp.type === "kpi" && (
+                                      <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3 w-full">
+                                        <TrendingUp className="h-6 w-6 text-slate-400" />
+                                        <div>
+                                          <div className="text-[10px] uppercase font-bold text-slate-400">{comp.label}</div>
+                                          <div className="text-lg font-black text-slate-700">-</div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
 
-                    {/* Right Column: Component Properties Inspector */}
-                    <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-4 sticky top-4">
-                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Properties Inspector</div>
-                      {selectedComponentId ? (
-                        (() => {
-                          const comp = (activeMenu.layoutComponents || []).find((c) => c.id === selectedComponentId);
-                          if (!comp) return <div className="text-xs text-slate-400">Pilih komponen di canvas untuk diedit.</div>;
+                      {/* Right: Inspector */}
+                      {selectedComponentId && (
+                        <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-4 sticky top-4">
+                          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Properties Inspector</div>
+                          {(() => {
+                            const comp = (activeMenu.layoutComponents || []).find((c) => c.id === selectedComponentId);
+                            if (!comp) return <div className="text-xs text-slate-400">Pilih komponen di canvas untuk diedit.</div>;
 
-                          return (
-                            <div className="space-y-4 animate-fade-in">
-                              <div className="pb-3 border-b border-slate-100 flex justify-between items-center">
-                                <span className="text-xs font-bold text-slate-800 uppercase">{comp.type} Properties</span>
-                                <button
-                                  onClick={() => deleteUIComponent(comp.id)}
-                                  className="text-red-500 hover:bg-red-50 p-1 rounded cursor-pointer"
-                                  title="Hapus Elemen"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
+                            return (
+                              <div className="space-y-4 animate-fade-in">
+                                <div className="pb-3 border-b border-slate-100 flex justify-between items-center">
+                                  <span className="text-xs font-bold text-slate-800 uppercase">{comp.type} Properties</span>
+                                  <button
+                                    onClick={() => deleteUIComponent(comp.id)}
+                                    className="text-red-500 hover:bg-red-50 p-1 rounded cursor-pointer"
+                                    title="Hapus Elemen"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
 
-                              {/* Label/Title */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Label / Judul</label>
-                                <input
-                                  type="text"
-                                  value={comp.label}
-                                  onChange={(e) => updateUIComponentProps(comp.id, { label: e.target.value })}
-                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                                />
-                              </div>
-
-                              {/* Placeholder */}
-                              {["input", "textarea"].includes(comp.type) && (
+                                {/* Label/Title */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Placeholder</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Label / Judul</label>
                                   <input
                                     type="text"
-                                    value={comp.placeholder || ""}
-                                    onChange={(e) => updateUIComponentProps(comp.id, { placeholder: e.target.value })}
+                                    value={comp.label}
+                                    onChange={(e) => updateUIComponentProps(comp.id, { label: e.target.value })}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
                                   />
                                 </div>
-                              )}
 
-                              {/* Width selection */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lebar Elemen (Grid)</label>
-                                <select
-                                  value={comp.width}
-                                  onChange={(e) => updateUIComponentProps(comp.id, { width: e.target.value as any })}
-                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
-                                >
-                                  <option value="col-12">Lebar Penuh (100%)</option>
-                                  <option value="col-6">Setengah (50%)</option>
-                                  <option value="col-4">1/3 Grid (33%)</option>
-                                  <option value="col-3">1/4 Grid (25%)</option>
-                                </select>
-                              </div>
-
-                              {/* Column binding for inputs */}
-                              {["input", "textarea", "select", "date"].includes(comp.type) && (
-                                <div>
-                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1.5">
-                                    <Database className="h-3.5 w-3.5 text-slate-400" /> Hubungkan ke Kolom Database
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={comp.associatedColumn || ""}
-                                    onChange={(e) => updateUIComponentProps(comp.id, { associatedColumn: e.target.value.trim() })}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
-                                    placeholder="nama_kolom (huruf kecil & tanpa spasi)"
-                                  />
-                                  <p className="text-[9px] text-slate-400 mt-1">Sistem akan menyinkronkan kolom Spreadsheet sesuai nama ini.</p>
-                                </div>
-                              )}
-
-                              {/* Required toggle */}
-                              {["input", "textarea", "select", "date"].includes(comp.type) && (
-                                <label className="flex items-center gap-2 cursor-pointer pt-1">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!comp.required}
-                                    onChange={(e) => updateUIComponentProps(comp.id, { required: e.target.checked })}
-                                    className="h-4.5 w-4.5 rounded border-slate-300 cursor-pointer"
-                                  />
-                                  <span className="text-[11px] font-semibold text-slate-600">Wajib Diisi (Required)</span>
-                                </label>
-                              )}
-
-                              {/* Options editing for dropdown select */}
-                              {comp.type === "select" && (
-                                <div className="space-y-2">
-                                  <label className="block text-[11px] font-semibold text-slate-600">Pilihan Dropdown</label>
-                                  <div className="space-y-1">
-                                    {(comp.options || []).map((opt, oIdx) => (
-                                      <div key={oIdx} className="flex gap-1 items-center">
-                                        <input
-                                          type="text"
-                                          value={opt}
-                                          onChange={(e) => {
-                                            const opts = [...(comp.options || [])];
-                                            opts[oIdx] = e.target.value;
-                                            updateUIComponentProps(comp.id, { options: opts });
-                                          }}
-                                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs"
-                                        />
-                                        <button
-                                          onClick={() => {
-                                            const opts = (comp.options || []).filter((_, i) => i !== oIdx);
-                                            updateUIComponentProps(comp.id, { options: opts });
-                                          }}
-                                          className="text-red-500 hover:bg-red-50 p-1 rounded cursor-pointer"
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                    <button
-                                      onClick={() => {
-                                        const opts = [...(comp.options || []), `Pilihan ${(comp.options || []).length + 1}`];
-                                        updateUIComponentProps(comp.id, { options: opts });
-                                      }}
-                                      className="text-xs text-brand-600 font-bold hover:underline pt-1 flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <Plus className="h-3 w-3" /> Tambah Pilihan
-                                    </button>
+                                {/* Placeholder */}
+                                {["input", "textarea"].includes(comp.type) && (
+                                  <div>
+                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Placeholder</label>
+                                    <input
+                                      type="text"
+                                      value={comp.placeholder || ""}
+                                      onChange={(e) => updateUIComponentProps(comp.id, { placeholder: e.target.value })}
+                                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                                    />
                                   </div>
-                                </div>
-                              )}
+                                )}
 
-                              {/* Button Actions */}
-                              {comp.type === "button" && (
+                                {/* Width selection */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Aksi Tombol</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lebar Elemen (Grid)</label>
                                   <select
-                                    value={comp.buttonAction}
-                                    onChange={(e) => updateUIComponentProps(comp.id, { buttonAction: e.target.value as any })}
+                                    value={comp.width}
+                                    onChange={(e) => updateUIComponentProps(comp.id, { width: e.target.value as any })}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
                                   >
-                                    <option value="submit">Kirim Form (Submit)</option>
-                                    <option value="reset">Kosongkan Form (Reset)</option>
-                                    <option value="custom">Aksi Kustom (Custom)</option>
+                                    <option value="col-12">Lebar Penuh (100%)</option>
+                                    <option value="col-6">Setengah (50%)</option>
+                                    <option value="col-4">1/3 Grid (33%)</option>
+                                    <option value="col-3">1/4 Grid (25%)</option>
                                   </select>
                                 </div>
-                              )}
 
-                              {/* Chart Type */}
-                              {comp.type === "chart" && (
-                                <div>
-                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tipe Grafik</label>
-                                  <select
-                                    value={comp.chartType}
-                                    onChange={(e) => updateUIComponentProps(comp.id, { chartType: e.target.value as any })}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
-                                  >
-                                    <option value="bar">Bar Chart (Batang)</option>
-                                    <option value="line">Line Chart (Garis)</option>
-                                    <option value="pie">Pie Chart (Lingkaran)</option>
-                                  </select>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <div className="text-xs text-slate-400 py-4 text-center">
-                          Pilih komponen di canvas untuk mulai mengedit properti detailnya.
+                                {/* Column binding for inputs */}
+                                {["input", "textarea", "select", "date"].includes(comp.type) && (
+                                  <div>
+                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1.5">
+                                      <Database className="h-3.5 w-3.5 text-slate-400" /> Hubungkan ke Kolom Database
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={comp.associatedColumn || ""}
+                                      onChange={(e) => updateUIComponentProps(comp.id, { associatedColumn: e.target.value.trim() })}
+                                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
+                                      placeholder="nama_kolom (huruf kecil & tanpa spasi)"
+                                    />
+                                    <p className="text-[9px] text-slate-400 mt-1">Sistem akan menyinkronkan kolom Spreadsheet sesuai nama ini.</p>
+                                  </div>
+                                )}
+
+                                {/* Required toggle */}
+                                {["input", "textarea", "select", "date"].includes(comp.type) && (
+                                  <label className="flex items-center gap-2 cursor-pointer pt-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!comp.required}
+                                      onChange={(e) => updateUIComponentProps(comp.id, { required: e.target.checked })}
+                                      className="h-4.5 w-4.5 rounded border-slate-300 cursor-pointer"
+                                    />
+                                    <span className="text-[11px] font-semibold text-slate-600">Wajib Diisi (Required)</span>
+                                  </label>
+                                )}
+
+                                {/* Options editing for dropdown select */}
+                                {comp.type === "select" && (
+                                  <div className="space-y-2">
+                                    <label className="block text-[11px] font-semibold text-slate-600">Pilihan Dropdown</label>
+                                    <div className="space-y-1">
+                                      {(comp.options || []).map((opt, oIdx) => (
+                                        <div key={oIdx} className="flex gap-1 items-center">
+                                          <input
+                                            type="text"
+                                            value={opt}
+                                            onChange={(e) => {
+                                              const opts = [...(comp.options || [])];
+                                              opts[oIdx] = e.target.value;
+                                              updateUIComponentProps(comp.id, { options: opts });
+                                            }}
+                                            className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs"
+                                          />
+                                          <button
+                                            onClick={() => {
+                                              const opts = (comp.options || []).filter((_, i) => i !== oIdx);
+                                              updateUIComponentProps(comp.id, { options: opts });
+                                            }}
+                                            className="text-red-500 hover:bg-red-50 p-1 rounded cursor-pointer"
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                      <button
+                                        onClick={() => {
+                                          const opts = [...(comp.options || []), `Pilihan ${(comp.options || []).length + 1}`];
+                                          updateUIComponentProps(comp.id, { options: opts });
+                                        }}
+                                        className="text-xs text-brand-600 font-bold hover:underline pt-1 flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Plus className="h-3 w-3" /> Tambah Pilihan
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Button Actions */}
+                                {comp.type === "button" && (
+                                  <div>
+                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Aksi Tombol</label>
+                                    <select
+                                      value={comp.buttonAction}
+                                      onChange={(e) => updateUIComponentProps(comp.id, { buttonAction: e.target.value as any })}
+                                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
+                                    >
+                                      <option value="submit">Kirim Form (Submit)</option>
+                                      <option value="reset">Kosongkan Form (Reset)</option>
+                                      <option value="custom">Aksi Kustom (Custom)</option>
+                                    </select>
+                                  </div>
+                                )}
+
+                                {/* Chart Type */}
+                                {comp.type === "chart" && (
+                                  <div>
+                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tipe Grafik</label>
+                                    <select
+                                      value={comp.chartType}
+                                      onChange={(e) => updateUIComponentProps(comp.id, { chartType: e.target.value as any })}
+                                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
+                                    >
+                                      <option value="bar">Bar Chart (Batang)</option>
+                                      <option value="line">Line Chart (Garis)</option>
+                                      <option value="pie">Pie Chart (Lingkaran)</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
-                    </div>
 
+                    </div>
                   </div>
                 )}
 
