@@ -33,6 +33,7 @@ import {
   type UserProfile,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { compileFullHTMLStructure } from "@/lib/prompt-builder";
 
 // Helper to extract content inside [TAG]...[/TAG] or to the end of string if not closed yet
 const parseTaggedContent = (text: string) => {
@@ -392,10 +393,12 @@ export default function ResultPage() {
         throw new Error("Konfigurasi Supabase tidak lengkap di environment.");
       }
 
+      const compiledHtmlLayout = compileFullHTMLStructure(prompt.inputData);
+
       const initialMessagesHtml = [
         {
           role: "user" as const,
-          content: `Buatkan kode frontend (index.html) saja berdasarkan plan berikut:\n\n${prompt.outputMd}\n\nDan sesuaikan dengan kode backend (code.gs) berikut:\n\n${editedGs}`,
+          content: `Berikut adalah template frontend (index.html) lengkap yang telah di-generate secara visual oleh user:\n\n\`\`\`html\n${compiledHtmlLayout}\n\`\`\`\n\nDan berikut adalah kode backend (code.gs) yang sudah dibuat:\n\n\`\`\`javascript\n${editedGs}\n\`\`\`\n\nAI WAJIB melengkapi template \`index.html\` di atas dengan menyisipkan seluruh logika interaksi client-side di dalam tag \`<script>\` yang tepat (terutama di bagian komentar "// === PLACEHOLDER LOGIC: AI AKAN MENGISI SCRIPT INTERAKSI DI SINI ===").\n\nLogika tersebut harus menghubungkan seluruh input visual (dengan ID masing-masing) dan interaksi tombol ke fungsi backend Google Apps Script yang sesuai melalui \`google.script.run\` (seperti \`getData_[Sheet]\`, \`createData_[Sheet]\`, dll) dengan success/failure handler.\n\nHindari mengubah struktur HTML atau kelas CSS, cukup tambahkan kode JavaScript interaksinya saja di dalam tag \`<script>\` yang sesuai.\n\nKembalikan seluruh berkas \`index.html\` lengkap yang sudah terintegrasi dengan kode JavaScript di dalam tag [CODE_HTML] ... [/CODE_HTML].`,
         },
       ];
 

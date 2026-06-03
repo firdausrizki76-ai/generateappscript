@@ -28,6 +28,20 @@ export interface PromptHistory {
   chatHistory?: { role: "user" | "assistant"; content: string; reasoning?: string }[];
 }
 
+export interface UIComponent {
+  id: string;
+  type: "heading" | "paragraph" | "input" | "textarea" | "select" | "date" | "button" | "table" | "chart" | "kpi";
+  label: string;
+  placeholder?: string;
+  width: "col-12" | "col-6" | "col-4" | "col-3";
+  required?: boolean;
+  options?: string[];
+  associatedColumn?: string;
+  buttonAction?: "submit" | "reset" | "custom";
+  chartType?: "bar" | "line" | "pie";
+  kpiIcon?: string;
+}
+
 export interface MenuItem {
   name: string;
   icon: string;
@@ -37,6 +51,7 @@ export interface MenuItem {
   filterColumns: string;
   hasExport: boolean;
   exportFormats: string[];
+  layoutComponents?: UIComponent[];
 }
 
 export interface ColumnDef {
@@ -490,6 +505,7 @@ export function getDefaultWizardData(): WizardData {
         filterColumns: "",
         hasExport: false,
         exportFormats: [],
+        layoutComponents: [],
       },
     ],
     sheets: [],

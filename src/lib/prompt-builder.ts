@@ -2,7 +2,122 @@
    Prompt Builder — generates plan.md from wizard data
    ───────────────────────────────────────────── */
 
-import type { WizardData } from "./store";
+import type { WizardData, MenuItem, UIComponent } from "./store";
+
+const promptThemeColors: Record<string, string> = {
+  "Biru profesional": "#0d6efd",
+  "Hijau segar": "#198754",
+  "Ungu modern": "#6f42c1",
+  "Abu netral": "#6c757d",
+};
+
+export function compileCanvasToHTML(menu: MenuItem, themeColor: string): string {
+  const components = menu.layoutComponents || [];
+  if (components.length === 0) return "";
+
+  let html = `<div class="container-fluid py-4" id="page_${menu.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}">\n`;
+  html += `  <div class="row g-3">\n`;
+
+  for (const comp of components) {
+    const colClass = comp.width || "col-12";
+    html += `    <div class="${colClass}">\n`;
+
+    switch (comp.type) {
+      case "heading":
+        html += `      <h2 class="mb-3 Outfit-font text-dark">${comp.label}</h2>\n`;
+        break;
+      case "paragraph":
+        html += `      <p class="text-muted leading-relaxed">${comp.label}</p>\n`;
+        break;
+      case "input":
+        html += `      <div class="mb-3">\n`;
+        html += `        <label class="form-label fw-semibold">${comp.label}${comp.required ? ' <span class="text-danger">*</span>' : ''}</label>\n`;
+        html += `        <input type="text" id="${comp.id}" name="${comp.associatedColumn || comp.id}" class="form-control form-control-lg bg-light border-light" placeholder="${comp.placeholder || ''}" ${comp.required ? 'required' : ''}>\n`;
+        html += `      </div>\n`;
+        break;
+      case "textarea":
+        html += `      <div class="mb-3">\n`;
+        html += `        <label class="form-label fw-semibold">${comp.label}${comp.required ? ' <span class="text-danger">*</span>' : ''}</label>\n`;
+        html += `        <textarea id="${comp.id}" name="${comp.associatedColumn || comp.id}" class="form-control form-control-lg bg-light border-light" rows="3" placeholder="${comp.placeholder || ''}" ${comp.required ? 'required' : ''}></textarea>\n`;
+        html += `      </div>\n`;
+        break;
+      case "select":
+        html += `      <div class="mb-3">\n`;
+        html += `        <label class="form-label fw-semibold">${comp.label}${comp.required ? ' <span class="text-danger">*</span>' : ''}</label>\n`;
+        html += `        <select id="${comp.id}" name="${comp.associatedColumn || comp.id}" class="form-select form-select-lg bg-light border-light" ${comp.required ? 'required' : ''}>\n`;
+        for (const opt of (comp.options || [])) {
+          html += `          <option value="${opt}">${opt}</option>\n`;
+        }
+        html += `        </select>\n`;
+        html += `      </div>\n`;
+        break;
+      case "date":
+        html += `      <div class="mb-3">\n`;
+        html += `        <label class="form-label fw-semibold">${comp.label}${comp.required ? ' <span class="text-danger">*</span>' : ''}</label>\n`;
+        html += `        <input type="date" id="${comp.id}" name="${comp.associatedColumn || comp.id}" class="form-control form-control-lg bg-light border-light" ${comp.required ? 'required' : ''}>\n`;
+        html += `      </div>\n`;
+        break;
+      case "button":
+        const actionType = comp.buttonAction === "submit" ? "submit" : "button";
+        html += `      <div class="mb-3">\n`;
+        html += `        <button type="${actionType}" id="${comp.id}" class="btn btn-lg w-100 shadow-sm transition-all text-white" style="background-color: ${themeColor};">\n`;
+        html += `          ${comp.label}\n`;
+        html += `        </button>\n`;
+        html += `      </div>\n`;
+        break;
+      case "table":
+        html += `      <div class="card border-light shadow-sm mb-4">\n`;
+        html += `        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">\n`;
+        html += `          <h5 class="mb-0 fw-bold Outfit-font">${comp.label}</h5>\n`;
+        html += `          <div class="input-group input-group-sm w-auto">\n`;
+        html += `            <input type="text" id="search_${comp.id}" class="form-control bg-light" placeholder="Cari...">\n`;
+        html += `          </div>\n`;
+        html += `        </div>\n`;
+        html += `        <div class="table-responsive">\n`;
+        html += `          <table class="table table-hover align-middle mb-0" id="table_${comp.id}">\n`;
+        html += `            <thead class="table-light">\n`;
+        html += `              <tr>\n`;
+        html += `                <th>Data</th>\n`;
+        html += `              </tr>\n`;
+        html += `            </thead>\n`;
+        html += `            <tbody>\n`;
+        html += `              <tr><td class="text-center text-muted py-4">Memuat data...</td></tr>\n`;
+        html += `            </tbody>\n`;
+        html += `          </table>\n`;
+        html += `        </div>\n`;
+        html += `      </div>\n`;
+        break;
+      case "chart":
+        html += `      <div class="card border-light shadow-sm mb-4">\n`;
+        html += `        <div class="card-body">\n`;
+        html += `          <h5 class="card-title fw-bold Outfit-font mb-3">${comp.label}</h5>\n`;
+        html += `          <div class="chart-container" style="position: relative; height:250px; width:100%">\n`;
+        html += `            <canvas id="chart_${comp.id}"></canvas>\n`;
+        html += `          </div>\n`;
+        html += `        </div>\n`;
+        html += `      </div>\n`;
+        break;
+      case "kpi":
+        html += `      <div class="card border-light shadow-sm mb-3">\n`;
+        html += `        <div class="card-body d-flex align-items-center">\n`;
+        html += `          <div class="rounded-circle p-3 bg-light d-flex align-items-center justify-content-center me-3" style="color: ${themeColor}; width: 48px; height: 48px;">\n`;
+        html += `            <i class="bi bi-graph-up fs-4"></i>\n`;
+        html += `          </div>\n`;
+        html += `          <div>\n`;
+        html += `            <h6 class="text-muted mb-1 text-uppercase fw-semibold" style="font-size: 11px;">${comp.label}</h6>\n`;
+        html += `            <h3 class="mb-0 fw-bold Outfit-font" id="kpi_${comp.id}">-</h3>\n`;
+        html += `          </div>\n`;
+        html += `        </div>\n`;
+        html += `      </div>\n`;
+        break;
+    }
+    html += `    </div>\n`;
+  }
+
+  html += `  </div>\n`;
+  html += `</div>`;
+  return html;
+}
 
 const iconToEmojiMap: Record<string, string> = {
   ClipboardList: "📋",
@@ -96,6 +211,21 @@ export function buildPrompt(data: WizardData): string {
       ln(`**Export Data:** ${menu.exportFormats.join(", ")}`);
       ln();
     }
+  }
+
+  // ── Visual HTML Layout Template
+  ln(`## Visual HTML Layout Template (DO NOT MODIFY STRUCTURE)`);
+  ln(`AI WAJIB menggunakan struktur HTML dan CSS yang sudah dikompilasi secara visual oleh user berikut sebagai template utama untuk file \`index.html\`.`);
+  ln(`Tugas Anda hanya menyisipkan logika interaksi (event listener, penanganan form, pengisian tabel, grafik) di dalam tag \`<script>\` yang tepat di dalam berkas HTML ini.`);
+  ln();
+  for (const menu of data.menus) {
+    const rawThemeColor = data.colorTheme === "Custom hex" ? data.customColor : (promptThemeColors[data.colorTheme] || "#0d6efd");
+    ln(`### Halaman/Menu: ${menu.name}`);
+    ln(`Berikut adalah kode HTML layout untuk halaman ini:`);
+    ln(`\`\`\`html`);
+    ln(compileCanvasToHTML(menu, rawThemeColor));
+    ln(`\`\`\``);
+    ln();
   }
 
   // ── Frontend Requirements
@@ -292,4 +422,340 @@ export function buildPrompt(data: WizardData): string {
   ln(`- [ ] Error message ditampilkan jika operasi gagal`);
 
   return lines.join("\n");
+}
+
+export function compileFullHTMLStructure(data: WizardData): string {
+  const themeColors: Record<string, string> = {
+    "Biru profesional": "#0d6efd",
+    "Hijau segar": "#198754",
+    "Ungu modern": "#6f42c1",
+    "Abu netral": "#6c757d",
+  };
+  const themeColor = data.colorTheme === "Custom hex" ? data.customColor : (themeColors[data.colorTheme] || "#0d6efd");
+
+  let html = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${data.appName}</title>
+  
+  <!-- CSS Framework & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --theme-color: ${themeColor};
+      --theme-color-rgb: 13, 110, 253; /* Fallback */
+      --font-family-base: 'Plus Jakarta Sans', sans-serif;
+      --font-family-heading: 'Outfit', sans-serif;
+    }
+    
+    body {
+      font-family: var(--font-family-base);
+      background-color: #f8f9fa;
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    .Outfit-font, .font-heading, h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-family-heading);
+    }
+
+    /* Premium Theme Elements */
+    .bg-theme-gradient {
+      background: linear-gradient(135deg, var(--theme-color) 0%, #1e293b 100%);
+    }
+
+    /* Glassmorphism Styles */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      box-shadow: 0 10px 30px -10px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.02);
+      border-radius: 16px;
+      transition: all 0.25s ease-in-out;
+    }
+
+    .glass-card:hover {
+      box-shadow: 0 15px 35px -5px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.03);
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 260px;
+      min-height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid rgba(0, 0, 0, 0.05);
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.02);
+      transition: all 0.3s ease;
+      z-index: 100;
+    }
+
+    .nav-link-custom {
+      font-weight: 500;
+      color: #4b5563;
+      padding: 12px 16px;
+      border-radius: 12px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .nav-link-custom:hover {
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .nav-link-custom.active {
+      background-color: var(--theme-color);
+      color: #ffffff !important;
+      box-shadow: 0 4px 15px rgba(var(--theme-color-rgb), 0.3);
+    }
+
+    /* Main Content Wrapper */
+    .content-area {
+      flex: 1;
+      padding: 30px;
+      min-height: 100vh;
+    }
+
+    /* Inputs Styling */
+    .form-control, .form-select {
+      border: 1px solid #e2e8f0;
+      padding: 11px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: all 0.2s ease-in-out;
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: var(--theme-color);
+      box-shadow: 0 0 0 3px rgba(var(--theme-color-rgb), 0.15);
+      outline: none;
+    }
+
+    /* Toast styling */
+    .toast-premium {
+      background-color: #ffffff;
+      border-left: 4px solid var(--theme-color);
+      border-radius: 12px;
+    }
+
+    /* Animation effects */
+    .fade-in-section {
+      animation: fadeIn 0.3s ease-in-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-dark bg-opacity-50 text-white d-none" style="z-index: 2000; backdrop-filter: blur(2px);">
+    <div class="spinner-border text-light mb-2" role="status"></div>
+    <span class="fw-semibold">Sedang diproses...</span>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+    <div id="appToast" class="toast border-0 shadow-lg toast-premium" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body fw-medium" id="toastMessage"></div>
+        <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTH/LOGIN WRAPPER -->
+  ${data.hasLogin ? `
+  <div id="loginPage" class="position-fixed top-0 start-0 w-100 h-100 bg-light d-flex align-items-center justify-content-center" style="z-index: 1500;">
+    <div class="card border-0 shadow-lg p-5 rounded-4" style="max-width: 400px; width: 100%;">
+      <div class="text-center mb-4">
+        <h3 class="fw-bold font-heading">${data.appName}</h3>
+        <p class="text-muted">Silakan masuk menggunakan akun Anda</p>
+      </div>
+      <form id="loginForm">
+        <div class="mb-3">
+          <label class="form-label font-heading fw-semibold">Username</label>
+          <input type="text" id="loginUsername" class="form-control" required placeholder="Masukkan username">
+        </div>
+        <div class="mb-3">
+          <label class="form-label font-heading fw-semibold">Password</label>
+          <input type="password" id="loginPassword" class="form-control" required placeholder="Masukkan password">
+        </div>
+        <button type="submit" class="btn w-100 py-2.5 text-white fw-bold shadow-sm" style="background-color: var(--theme-color)">Masuk</button>
+      </form>
+    </div>
+  </div>
+  ` : ''}
+
+  <!-- MAIN APP SHELL -->
+  <div class="d-flex" id="appShell">
+    
+    <!-- SIDEBAR -->
+    <div class="sidebar d-flex flex-column shrink-0">
+      <div class="p-4 bg-theme-gradient text-white d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-cpu-fill fs-4"></i>
+        <span class="fs-5 fw-bold font-heading truncate">${data.appName}</span>
+      </div>
+      
+      <div class="flex-grow-1 px-3 overflow-y-auto">
+        ${data.menus.map((menu, idx) => {
+          const menuId = `menu_${menu.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+          // Map lucide icons to bootstrap icon names
+          const bsIcons: Record<string, string> = {
+            ClipboardList: "list-task",
+            Users: "people",
+            BarChart3: "graph-up",
+            Package: "box",
+            DollarSign: "currency-dollar",
+            Calendar: "calendar",
+            Bell: "bell",
+            FileEdit: "pencil-square",
+            Settings: "gear",
+            Folder: "folder",
+            TrendingUp: "arrow-up-right",
+            Tag: "tag"
+          };
+          const icon = bsIcons[menu.icon] || "grid";
+
+          return `
+          <a href="#" class="nav-link-custom ${idx === 0 ? 'active' : ''}" id="nav_${menuId}" onclick="switchPage('${menuId}')">
+            <i class="bi bi-${icon}"></i>
+            <span>${menu.name}</span>
+          </a>
+          `;
+        }).join('')}
+      </div>
+
+      ${data.hasLogin ? `
+      <div class="p-3 border-t border-light">
+        <button onclick="logoutUser()" class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2 rounded-3 py-2">
+          <i class="bi bi-box-arrow-right"></i>
+          <span>Keluar</span>
+        </button>
+      </div>
+      ` : ''}
+    </div>
+
+    <!-- CONTENT PANEL -->
+    <div class="content-area overflow-auto">
+      
+      <!-- HEADER BAR -->
+      <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
+        <h4 class="mb-0 font-heading fw-bold" id="currentPageTitle">${data.menus[0]?.name || 'Beranda'}</h4>
+        <div class="d-flex align-items-center gap-3">
+          <span class="text-secondary small d-none d-sm-inline" id="userWelcome">Selamat datang</span>
+          <div class="bg-light border rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+            <i class="bi bi-person fs-5"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGES -->
+      <div class="pages-container">
+        ${data.menus.map((menu, idx) => {
+          const menuId = `menu_${menu.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+          return `
+          <div id="page_${menuId}" class="page-section fade-in-section ${idx === 0 ? '' : 'd-none'}">
+            ${compileCanvasToHTML(menu, themeColor)}
+          </div>
+          `;
+        }).join('')}
+      </div>
+
+    </div>
+  </div>
+
+  <!-- GLOBAL FORM MODAL (GENERIC CRUD) -->
+  <div class="modal fade" id="formModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+        <form id="appForm">
+          <div class="modal-header border-0 bg-light py-3 px-4">
+            <h5 class="modal-title fw-bold font-heading" id="formModalTitle">Tambah Data</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-4" id="formModalBody">
+            <!-- Dynamic input components will be displayed/hidden here by client JS -->
+          </div>
+          <div class="modal-footer border-0 px-4 pb-4">
+            <button type="button" class="btn btn-light rounded-3 px-4" data-bs-dismiss="modal">Batal</button>
+            <button type="submit" class="btn text-white fw-bold rounded-3 px-4 shadow-sm" id="btnFormSubmit" style="background-color: var(--theme-color)">Simpan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- GLOBAL DELETE CONFIRMATION MODAL -->
+  <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4 text-center p-4">
+        <div class="text-danger mb-3"><i class="bi bi-exclamation-triangle fs-1"></i></div>
+        <h5 class="fw-bold font-heading mb-2">Hapus Data?</h5>
+        <p class="text-muted small">Data yang dihapus tidak dapat dikembalikan lagi dari database.</p>
+        <div class="d-flex gap-2 mt-3">
+          <button type="button" class="btn btn-light flex-1 rounded-3" data-bs-dismiss="modal">Batal</button>
+          <button type="button" class="btn btn-danger flex-1 rounded-3 fw-bold" id="btnConfirmDelete">Hapus</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS Scripts Framework -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <!-- INTERACTIVE JS CODE GENERATED BY AI -->
+  <script>
+    // System UI Helpers
+    const showLoading = (show) => {
+      document.getElementById('loadingOverlay').classList.toggle('d-none', !show);
+    };
+
+    const showToast = (message, success = true) => {
+      const toastEl = document.getElementById('appToast');
+      const toastMessage = document.getElementById('toastMessage');
+      toastMessage.innerText = message;
+      toastEl.style.borderLeftColor = success ? 'var(--theme-color)' : '#dc3545';
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    };
+
+    const switchPage = (pageId) => {
+      document.querySelectorAll('.page-section').forEach(p => p.classList.add('d-none'));
+      document.querySelectorAll('.nav-link-custom').forEach(l => l.classList.remove('active'));
+      
+      const targetPage = document.getElementById('page_' + pageId);
+      if (targetPage) targetPage.classList.remove('d-none');
+      
+      const targetLink = document.getElementById('nav_' + pageId);
+      if (targetLink) targetLink.classList.add('active');
+      
+      // Update Title
+      const linkText = targetLink ? targetLink.querySelector('span').innerText : '';
+      document.getElementById('currentPageTitle').innerText = linkText;
+    };
+
+    // === PLACEHOLDER LOGIC: AI AKAN MENGISI SCRIPT INTERAKSI DI SINI ===
+  </script>
+
+</body>
+</html>`;
+  return html;
 }

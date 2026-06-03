@@ -6,6 +6,8 @@ import {
   Sparkles,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   Plus,
   Trash2,
   Check,
@@ -50,6 +52,7 @@ import {
   type SheetDef,
   type ColumnDef,
   type UserProfile,
+  type UIComponent,
 } from "@/lib/store";
 import { buildPrompt } from "@/lib/prompt-builder";
 
@@ -123,6 +126,8 @@ export default function GeneratePage() {
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [showCrudHelp, setShowCrudHelp] = useState(false);
+  const [activeBuilderTab, setActiveBuilderTab] = useState<"canvas" | "schema">("canvas");
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -141,6 +146,52 @@ export default function GeneratePage() {
       setData(prev => ({...prev, appName: "Aplikasi Baru", appDescription: "Aplikasi internal untuk manajemen data."}));
     }
   }, [router]);
+
+  const currentMenuName = data.menus[activeMenuIndex]?.name;
+  const currentMenuCrud = data.menus[activeMenuIndex]?.crud;
+  
+  useEffect(() => {
+    const activeMenu = data.menus[activeMenuIndex];
+    if (activeMenu && (!activeMenu.layoutComponents || activeMenu.layoutComponents.length === 0)) {
+      const list: UIComponent[] = [];
+      list.push({
+        id: "heading_" + generateId().slice(0, 4),
+        type: "heading",
+        label: activeMenu.name || "Judul Halaman",
+        width: "col-12",
+      });
+      if (activeMenu.crud.read) {
+        list.push({
+          id: "table_" + generateId().slice(0, 4),
+          type: "table",
+          label: "Tabel Data " + (activeMenu.name || ""),
+          width: "col-12",
+        });
+      }
+      const sheet = data.sheets.find(s => s.menuName === activeMenu.name);
+      if (sheet && (activeMenu.crud.create || activeMenu.crud.update)) {
+        sheet.columns.forEach((col, idx) => {
+          list.push({
+            id: `input_${generateId().slice(0, 4)}`,
+            type: col.type === "Tanggal" ? "date" : col.type === "Pilihan" ? "select" : col.type === "Teks" && col.name.toLowerCase().includes("alamat") ? "textarea" : "input",
+            label: col.name,
+            placeholder: "Masukkan " + col.name,
+            width: "col-6",
+            required: col.required,
+            associatedColumn: col.name,
+          });
+        });
+        list.push({
+          id: "btn_" + generateId().slice(0, 4),
+          type: "button",
+          label: "Simpan Data",
+          width: "col-12",
+          buttonAction: "submit",
+        });
+      }
+      updateMenu(activeMenuIndex, { layoutComponents: list });
+    }
+  }, [activeMenuIndex, currentMenuName, currentMenuCrud?.create, currentMenuCrud?.read, currentMenuCrud?.update, currentMenuCrud?.delete]);
 
   /* ─── Data Syncing Helpers ─── */
   
@@ -178,6 +229,114 @@ export default function GeneratePage() {
       const syncedSheets = syncSheetsWithMenus(menus, sheets);
       return { ...prev, menus, sheets: syncedSheets };
     });
+  };
+
+  const syncSheetColumnsWithLayout = (menuName: string, components: UIComponent[], sheets: SheetDef[]): SheetDef[] => {
+    const sIdx = sheets.findIndex(s => s.menuName === menuName);
+    if (sIdx === -1) return sheets;
+
+    const nextSheets = [...sheets];
+    const sheet = nextSheets[sIdx];
+
+    // Collect input columns
+    const inputComponents = components.filter(c => ["input", "textarea", "select", "date"].includes(c.type));
+    
+    // Build column defs
+    const columnDefs = inputComponents.map(c => {
+      const colName = c.associatedColumn || c.label || "Kolom Baru";
+      let colType = "Teks";
+      if (c.type === "date") colType = "Tanggal";
+      else if (c.type === "select") colType = "Pilihan";
+      
+      // Check if column already exists in current sheet to preserve notes
+      const existingCol = sheet.columns.find(col => col.name === colName);
+      return {
+        name: colName,
+        type: colType,
+        required: !!c.required,
+        note: existingCol ? existingCol.note : "",
+      };
+    });
+
+    // Ensure we have at least one column
+    if (columnDefs.length === 0) {
+      columnDefs.push({ name: "Nama", type: "Teks", required: true, note: "" });
+    }
+
+    nextSheets[sIdx] = {
+      ...sheet,
+      columns: columnDefs
+    };
+
+    return nextSheets;
+  };
+
+  const updateMenuComponents = (idx: number, components: UIComponent[]) => {
+    setData((prev) => {
+      const menus = [...prev.menus];
+      menus[idx] = { ...menus[idx], layoutComponents: components };
+      
+      // Sync sheet columns
+      const sheets = syncSheetColumnsWithLayout(menus[idx].name, components, prev.sheets);
+      return { ...prev, menus, sheets };
+    });
+  };
+
+  const addUIComponent = (type: UIComponent["type"]) => {
+    const activeMenu = data.menus[activeMenuIndex];
+    if (!activeMenu) return;
+    
+    const newComp: UIComponent = {
+      id: `${type}_${generateId().slice(0, 4)}`,
+      type,
+      label: type.charAt(0).toUpperCase() + type.slice(1) + " Baru",
+      width: "col-12",
+      placeholder: ["input", "textarea"].includes(type) ? "Masukkan nilai..." : undefined,
+      options: type === "select" ? ["Pilihan 1", "Pilihan 2"] : undefined,
+      required: ["input", "textarea", "select", "date"].includes(type) ? false : undefined,
+      associatedColumn: ["input", "textarea", "select", "date"].includes(type) ? "kolom_baru" : undefined,
+      buttonAction: type === "button" ? "custom" : undefined,
+      chartType: type === "chart" ? "bar" : undefined,
+    };
+    
+    const currentList = activeMenu.layoutComponents || [];
+    const nextList = [...currentList, newComp];
+    updateMenuComponents(activeMenuIndex, nextList);
+    setSelectedComponentId(newComp.id);
+  };
+
+  const moveUIComponent = (idx: number, direction: "up" | "down") => {
+    const activeMenu = data.menus[activeMenuIndex];
+    if (!activeMenu) return;
+    
+    const list = [...(activeMenu.layoutComponents || [])];
+    if (direction === "up" && idx > 0) {
+      const temp = list[idx];
+      list[idx] = list[idx - 1];
+      list[idx - 1] = temp;
+    } else if (direction === "down" && idx < list.length - 1) {
+      const temp = list[idx];
+      list[idx] = list[idx + 1];
+      list[idx + 1] = temp;
+    }
+    updateMenuComponents(activeMenuIndex, list);
+  };
+
+  const deleteUIComponent = (id: string) => {
+    const activeMenu = data.menus[activeMenuIndex];
+    if (!activeMenu) return;
+    
+    const list = (activeMenu.layoutComponents || []).filter(c => c.id !== id);
+    updateMenuComponents(activeMenuIndex, list);
+    if (selectedComponentId === id) setSelectedComponentId(null);
+  };
+
+  const updateUIComponentProps = (id: string, partial: Partial<UIComponent>) => {
+    const activeMenu = data.menus[activeMenuIndex];
+    if (!activeMenu) return;
+    
+    const list = (activeMenu.layoutComponents || []).map(c => c.id === id ? { ...c, ...partial } : c);
+    updateMenuComponents(activeMenuIndex, list);
   };
 
   const addMenu = () => {
@@ -587,172 +746,547 @@ export default function GeneratePage() {
                   />
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                  {/* CRUD Toggle Editor inside the table header */}
-                  <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <Database className="h-4 w-4 text-slate-400" /> 
-                      <span className="font-medium">Struktur Kolom Data</span>
-                    </div>
+                {/* Tab Switcher */}
+                <div className="flex border-b border-slate-200 gap-6 mb-4">
+                  <button
+                    onClick={() => setActiveBuilderTab("canvas")}
+                    className={`pb-3 font-semibold text-sm transition-all border-b-2 px-1 cursor-pointer ${
+                      activeBuilderTab === "canvas"
+                        ? "border-slate-900 text-slate-900 font-bold"
+                        : "border-transparent text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    🎨 Desainer Tampilan (Visual Canvas)
+                  </button>
+                  <button
+                    onClick={() => setActiveBuilderTab("schema")}
+                    className={`pb-3 font-semibold text-sm transition-all border-b-2 px-1 cursor-pointer ${
+                      activeBuilderTab === "schema"
+                        ? "border-slate-900 text-slate-900 font-bold"
+                        : "border-transparent text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    📊 Struktur Database (Spreadsheet)
+                  </button>
+                </div>
+
+                {activeBuilderTab === "canvas" && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                     
-                    <div className="flex flex-col items-end gap-1.5">
-                      <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tracking-wide flex items-center gap-1.5">
-                        <span>* Izin Akses (Create, Read, Update, Delete)</span>
-                        <button onClick={() => setShowCrudHelp(true)} className="h-4 w-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center hover:bg-brand-100 hover:text-brand-600 transition-colors" title="Penjelasan CRUD">?</button>
-                      </div>
-                      <div className="flex bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm gap-2">
-                        {(["create", "read", "update", "delete"] as const).map((op) => (
+                    {/* Left Column: UI Components Toolbox */}
+                    <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-4">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Komponen UI</div>
+                      <div className="grid grid-cols-1 gap-2">
+                        {[
+                          { type: "heading", label: "Heading / Judul", icon: FileText },
+                          { type: "paragraph", label: "Paragraph Teks", icon: FileEdit },
+                          { type: "input", label: "Text Input", icon: Plus },
+                          { type: "textarea", label: "Textarea", icon: FileEdit },
+                          { type: "select", label: "Dropdown Select", icon: ChevronDown },
+                          { type: "date", label: "Date Picker", icon: Calendar },
+                          { type: "button", label: "Tombol / Button", icon: Check },
+                          { type: "table", label: "Tabel Data", icon: ClipboardList },
+                          { type: "chart", label: "Grafik Data", icon: BarChart3 },
+                          { type: "kpi", label: "KPI / Stat Card", icon: TrendingUp },
+                        ].map((c) => (
                           <button
-                            key={op}
-                            onClick={() => updateMenu(activeMenuIndex, { crud: { ...activeMenu.crud, [op]: !activeMenu.crud[op] } })}
-                            className={`px-3.5 py-2 rounded-lg text-xs font-semibold capitalize transition-all flex items-center gap-2 ${
-                              activeMenu.crud[op]
-                                ? "text-white shadow-md scale-[1.02]"
-                                : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-                            }`}
-                            style={{
-                              backgroundColor: activeMenu.crud[op] ? activeColor : undefined,
-                            }}
+                            key={c.type}
+                            onClick={() => addUIComponent(c.type as UIComponent["type"])}
+                            className="flex items-center gap-3 p-2.5 rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 text-left transition-all text-xs font-semibold text-slate-700 w-full cursor-pointer"
                           >
-                            {op === "create" && <Plus className="h-3.5 w-3.5" />}
-                            {op === "read" && <Eye className="h-3.5 w-3.5" />}
-                            {op === "update" && <RefreshCw className="h-3.5 w-3.5" />}
-                            {op === "delete" && <Trash2 className="h-3.5 w-3.5" />}
-                            {op}
+                            <div className="h-7 w-7 rounded bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                              <c.icon className="h-4 w-4" />
+                            </div>
+                            <span>{c.label}</span>
                           </button>
                         ))}
                       </div>
                     </div>
-                  </div>
 
-                  {activeSheet ? (
-                    <div className="p-4 bg-slate-50/50">
-                      <div className="flex overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm pb-1 custom-scrollbar">
-                        {/* Auto Columns Preview */}
-                        {activeSheet.autoCreatedAt && (
-                          <div className="shrink-0 w-44 border-r border-slate-200 bg-slate-50/70 select-none">
-                            <div className="p-3 border-b border-slate-200 font-semibold text-sm flex items-center gap-1.5 text-slate-500 bg-slate-100/50">
-                              <Lock className="h-3.5 w-3.5 text-slate-400"/> createdAt
-                            </div>
-                            <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-100 flex items-center justify-between">
-                              <span>Tipe:</span> <span>Tanggal</span>
-                            </div>
-                            <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-100 flex items-center justify-between">
-                              <span>Wajib:</span> <Check className="h-3 w-3" />
-                            </div>
-                            <div className="p-3 text-xs text-slate-300 italic border-b border-slate-50 bg-white">
-                              Data otomatis...
-                            </div>
-                            <div className="p-3 text-xs text-slate-300 italic bg-white">
-                              Data otomatis...
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Editable Columns */}
-                        {activeSheet.columns.map((col, cIdx) => (
-                          <div key={cIdx} className="shrink-0 w-56 border-r border-slate-200 relative group flex flex-col transition-colors hover:border-slate-300 focus-within:border-brand-300">
-                            {/* Header: Nama Kolom */}
-                            <div className="p-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between group-hover:bg-slate-100 transition-colors">
-                              <input
-                                type="text"
-                                value={col.name}
-                                onChange={(e) => updateColumn(activeSheetIndex, cIdx, { name: e.target.value })}
-                                className="w-full bg-transparent font-semibold text-sm border-none focus:ring-0 p-1 placeholder-slate-400"
-                                placeholder="Nama Kolom"
-                              />
-                              <button 
-                                onClick={() => removeColumn(activeSheetIndex, cIdx)} 
-                                disabled={activeSheet.columns.length <= 1}
-                                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors disabled:opacity-0"
-                              >
-                                <Trash2 className="h-3.5 w-3.5"/>
-                              </button>
-                            </div>
-                            
-                            {/* Tipe Data */}
-                            <div className="px-2 py-1.5 border-b border-slate-100 flex items-center justify-between">
-                              <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold px-1">Tipe</label>
-                              <select
-                                value={col.type}
-                                onChange={(e) => updateColumn(activeSheetIndex, cIdx, { type: e.target.value })}
-                                className="text-xs font-medium bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 text-slate-700 cursor-pointer text-right hover:bg-slate-50 rounded"
-                              >
-                                {dataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                              </select>
-                            </div>
-                            
-                            {/* Wajib Diisi */}
-                            <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
-                                 onClick={() => updateColumn(activeSheetIndex, cIdx, { required: !col.required })}>
-                              <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold cursor-pointer">Wajib Isi</label>
-                              <div className={`h-4 w-4 rounded flex items-center justify-center transition-colors border ${
-                                col.required ? "bg-slate-800 border-slate-800 text-white" : "border-slate-300 text-transparent"
-                              }`}>
-                                <Check className="h-3 w-3" />
-                              </div>
-                            </div>
-                            
-                            {/* Mock Data Rows */}
-                            <div className="p-3 text-xs text-slate-300 italic border-b border-slate-50 bg-white flex-1 flex items-center">
-                              Contoh isi data...
-                            </div>
-                            <div className="p-3 text-xs text-slate-300 italic bg-white flex-1 flex items-center">
-                              Contoh isi data...
-                            </div>
-                          </div>
-                        ))}
-                        
-                        {/* Add Column Button */}
-                        <div 
-                          className="shrink-0 w-32 bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer group" 
-                          onClick={() => addColumn(activeSheetIndex)}
-                        >
-                          <div className="text-center flex flex-col items-center gap-2 transition-transform group-hover:scale-105" style={{ color: activeColor }}>
-                            <div className="h-10 w-10 rounded-full bg-white shadow-sm border border-slate-200 flex items-center justify-center text-inherit">
-                              <Plus className="h-5 w-5" />
-                            </div>
-                            <span className="text-xs font-semibold text-slate-500 group-hover:text-slate-700">Tambah Kolom</span>
-                          </div>
+                    {/* Middle Column: Canvas Preview */}
+                    <div className="lg:col-span-6 space-y-4 min-h-[400px] p-4 bg-slate-100/50 rounded-2xl border border-slate-200 border-dashed">
+                      {(!activeMenu.layoutComponents || activeMenu.layoutComponents.length === 0) ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 gap-3">
+                          <Palette className="h-10 w-10 text-slate-300 animate-pulse" />
+                          <div className="text-sm font-semibold">Canvas Kosong</div>
+                          <div className="text-xs">Klik komponen di sebelah kiri untuk mulai mendesain tampilan halaman ini.</div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="grid grid-cols-12 gap-3">
+                          {(activeMenu.layoutComponents || []).map((comp, idx) => {
+                            const isSelected = selectedComponentId === comp.id;
+                            return (
+                              <div
+                                key={comp.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedComponentId(comp.id);
+                                }}
+                                className={`relative group p-4 bg-white rounded-xl border transition-all cursor-pointer ${
+                                  comp.width || "col-12"
+                                } ${
+                                  isSelected
+                                    ? "border-brand-500 ring-2 ring-brand-500/20 shadow-md scale-[1.01]"
+                                    : "border-slate-200 hover:border-slate-400 shadow-sm"
+                                }`}
+                              >
+                                {/* Drag/Hover Actions Overlay */}
+                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center bg-slate-900/90 text-white rounded-lg p-0.5 shadow-lg z-10 gap-0.5">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveUIComponent(idx, "up");
+                                    }}
+                                    disabled={idx === 0}
+                                    className="p-1 rounded hover:bg-white/20 disabled:opacity-20 cursor-pointer"
+                                    title="Pindahkan Ke Atas"
+                                  >
+                                    <ChevronUp className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveUIComponent(idx, "down");
+                                    }}
+                                    disabled={idx === (activeMenu.layoutComponents || []).length - 1}
+                                    className="p-1 rounded hover:bg-white/20 disabled:opacity-20 cursor-pointer"
+                                    title="Pindahkan Ke Bawah"
+                                  >
+                                    <ChevronDown className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteUIComponent(comp.id);
+                                    }}
+                                    className="p-1 rounded hover:bg-red-500/30 text-red-400 cursor-pointer"
+                                    title="Hapus Elemen"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+
+                                {/* Component Layout Representation */}
+                                <div className="space-y-1.5 pointer-events-none">
+                                  <div className="flex justify-between items-center mb-1">
+                                    <span className="text-[9px] uppercase tracking-wider bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-bold">
+                                      {comp.type}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 font-medium">
+                                      {comp.width === "col-12" ? "Lebar Penuh" : comp.width === "col-6" ? "Setengah" : comp.width === "col-4" ? "1/3 Grid" : "1/4 Grid"}
+                                    </span>
+                                  </div>
+
+                                  {comp.type === "heading" && (
+                                    <h4 className="text-base font-bold text-slate-800">{comp.label}</h4>
+                                  )}
+
+                                  {comp.type === "paragraph" && (
+                                    <p className="text-xs text-slate-500 leading-relaxed">{comp.label}</p>
+                                  )}
+
+                                  {["input", "textarea", "select", "date"].includes(comp.type) && (
+                                    <div className="space-y-1 w-full">
+                                      <label className="block text-[11px] font-bold text-slate-700">
+                                        {comp.label}{comp.required && <span className="text-red-500"> *</span>}
+                                      </label>
+                                      <div className="bg-slate-50 border border-slate-200 text-slate-400 rounded-lg p-2 text-xs truncate">
+                                        {comp.placeholder || `Input ${comp.type}...`}
+                                      </div>
+                                      {comp.associatedColumn && (
+                                        <div className="text-[9px] text-brand-600 font-semibold bg-brand-50/50 px-1.5 py-0.5 rounded w-max">
+                                          Database: {comp.associatedColumn}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {comp.type === "button" && (
+                                    <div className="w-full text-center py-2 rounded-lg text-xs font-bold text-white shadow-sm" style={{ backgroundColor: activeColor }}>
+                                      {comp.label}
+                                    </div>
+                                  )}
+
+                                  {comp.type === "table" && (
+                                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-full">
+                                      <div className="bg-slate-100 p-2 text-[10px] font-bold text-slate-600 border-b border-slate-200">
+                                        {comp.label}
+                                      </div>
+                                      <div className="p-3 text-[10px] text-slate-400 text-center italic">
+                                        [Tabel Data]
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {comp.type === "chart" && (
+                                    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3 w-full">
+                                      <BarChart3 className="h-6 w-6 text-slate-400" />
+                                      <div>
+                                        <div className="text-xs font-bold text-slate-700">{comp.label}</div>
+                                        <div className="text-[9px] text-slate-400 capitalize">Tipe: {comp.chartType || "bar"}</div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {comp.type === "kpi" && (
+                                    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3 w-full">
+                                      <TrendingUp className="h-6 w-6 text-slate-400" />
+                                      <div>
+                                        <div className="text-[10px] uppercase font-bold text-slate-400">{comp.label}</div>
+                                        <div className="text-lg font-black text-slate-700">-</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="p-6 bg-slate-50/50 flex-1 flex flex-col justify-center">
-                      <div className="max-w-md mx-auto w-full text-center mb-8">
-                        <h3 className="text-lg font-bold text-slate-700 font-display mb-2">Tampilan Dashboard / Statis</h3>
-                        <p className="text-sm text-slate-500 leading-relaxed">
-                          Karena menu ini tidak memiliki izin operasi <b>Create/Update/Delete</b>, tampilan akhirnya akan dirancang sebagai halaman informasi (Dashboard) yang bisa berisi bagan, grafik, atau rangkuman data.
-                        </p>
+
+                    {/* Right Column: Component Properties Inspector */}
+                    <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-4 sticky top-4">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Properties Inspector</div>
+                      {selectedComponentId ? (
+                        (() => {
+                          const comp = (activeMenu.layoutComponents || []).find((c) => c.id === selectedComponentId);
+                          if (!comp) return <div className="text-xs text-slate-400">Pilih komponen di canvas untuk diedit.</div>;
+
+                          return (
+                            <div className="space-y-4 animate-fade-in">
+                              <div className="pb-3 border-b border-slate-100 flex justify-between items-center">
+                                <span className="text-xs font-bold text-slate-800 uppercase">{comp.type} Properties</span>
+                                <button
+                                  onClick={() => deleteUIComponent(comp.id)}
+                                  className="text-red-500 hover:bg-red-50 p-1 rounded cursor-pointer"
+                                  title="Hapus Elemen"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+
+                              {/* Label/Title */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Label / Judul</label>
+                                <input
+                                  type="text"
+                                  value={comp.label}
+                                  onChange={(e) => updateUIComponentProps(comp.id, { label: e.target.value })}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                                />
+                              </div>
+
+                              {/* Placeholder */}
+                              {["input", "textarea"].includes(comp.type) && (
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Placeholder</label>
+                                  <input
+                                    type="text"
+                                    value={comp.placeholder || ""}
+                                    onChange={(e) => updateUIComponentProps(comp.id, { placeholder: e.target.value })}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Width selection */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lebar Elemen (Grid)</label>
+                                <select
+                                  value={comp.width}
+                                  onChange={(e) => updateUIComponentProps(comp.id, { width: e.target.value as any })}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
+                                >
+                                  <option value="col-12">Lebar Penuh (100%)</option>
+                                  <option value="col-6">Setengah (50%)</option>
+                                  <option value="col-4">1/3 Grid (33%)</option>
+                                  <option value="col-3">1/4 Grid (25%)</option>
+                                </select>
+                              </div>
+
+                              {/* Column binding for inputs */}
+                              {["input", "textarea", "select", "date"].includes(comp.type) && (
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1.5">
+                                    <Database className="h-3.5 w-3.5 text-slate-400" /> Hubungkan ke Kolom Database
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={comp.associatedColumn || ""}
+                                    onChange={(e) => updateUIComponentProps(comp.id, { associatedColumn: e.target.value.trim() })}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
+                                    placeholder="nama_kolom (huruf kecil & tanpa spasi)"
+                                  />
+                                  <p className="text-[9px] text-slate-400 mt-1">Sistem akan menyinkronkan kolom Spreadsheet sesuai nama ini.</p>
+                                </div>
+                              )}
+
+                              {/* Required toggle */}
+                              {["input", "textarea", "select", "date"].includes(comp.type) && (
+                                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!comp.required}
+                                    onChange={(e) => updateUIComponentProps(comp.id, { required: e.target.checked })}
+                                    className="h-4.5 w-4.5 rounded border-slate-300 cursor-pointer"
+                                  />
+                                  <span className="text-[11px] font-semibold text-slate-600">Wajib Diisi (Required)</span>
+                                </label>
+                              )}
+
+                              {/* Options editing for dropdown select */}
+                              {comp.type === "select" && (
+                                <div className="space-y-2">
+                                  <label className="block text-[11px] font-semibold text-slate-600">Pilihan Dropdown</label>
+                                  <div className="space-y-1">
+                                    {(comp.options || []).map((opt, oIdx) => (
+                                      <div key={oIdx} className="flex gap-1 items-center">
+                                        <input
+                                          type="text"
+                                          value={opt}
+                                          onChange={(e) => {
+                                            const opts = [...(comp.options || [])];
+                                            opts[oIdx] = e.target.value;
+                                            updateUIComponentProps(comp.id, { options: opts });
+                                          }}
+                                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs"
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            const opts = (comp.options || []).filter((_, i) => i !== oIdx);
+                                            updateUIComponentProps(comp.id, { options: opts });
+                                          }}
+                                          className="text-red-500 hover:bg-red-50 p-1 rounded cursor-pointer"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      onClick={() => {
+                                        const opts = [...(comp.options || []), `Pilihan ${(comp.options || []).length + 1}`];
+                                        updateUIComponentProps(comp.id, { options: opts });
+                                      }}
+                                      className="text-xs text-brand-600 font-bold hover:underline pt-1 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Plus className="h-3 w-3" /> Tambah Pilihan
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Button Actions */}
+                              {comp.type === "button" && (
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Aksi Tombol</label>
+                                  <select
+                                    value={comp.buttonAction}
+                                    onChange={(e) => updateUIComponentProps(comp.id, { buttonAction: e.target.value as any })}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
+                                  >
+                                    <option value="submit">Kirim Form (Submit)</option>
+                                    <option value="reset">Kosongkan Form (Reset)</option>
+                                    <option value="custom">Aksi Kustom (Custom)</option>
+                                  </select>
+                                </div>
+                              )}
+
+                              {/* Chart Type */}
+                              {comp.type === "chart" && (
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tipe Grafik</label>
+                                  <select
+                                    value={comp.chartType}
+                                    onChange={(e) => updateUIComponentProps(comp.id, { chartType: e.target.value as any })}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white"
+                                  >
+                                    <option value="bar">Bar Chart (Batang)</option>
+                                    <option value="line">Line Chart (Garis)</option>
+                                    <option value="pie">Pie Chart (Lingkaran)</option>
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="text-xs text-slate-400 py-4 text-center">
+                          Pilih komponen di canvas untuk mulai mengedit properti detailnya.
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                )}
+
+                {activeBuilderTab === "schema" && (
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col w-full">
+                    {/* CRUD Toggle Editor inside the table header */}
+                    <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <Database className="h-4 w-4 text-slate-400" /> 
+                        <span className="font-medium">Struktur Kolom Data</span>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto w-full opacity-60 hover:opacity-100 transition-opacity duration-300">
-                        {/* Mock Chart Box */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col items-center justify-center h-32 gap-3 hover:shadow-md transition-shadow">
-                          <BarChart3 className="h-8 w-8 text-indigo-400" />
-                          <div className="h-2 w-16 bg-slate-200 rounded-full"></div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tracking-wide flex items-center gap-1.5">
+                          <span>* Izin Akses (Create, Read, Update, Delete)</span>
+                          <button onClick={() => setShowCrudHelp(true)} className="h-4 w-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center hover:bg-brand-100 hover:text-brand-600 transition-colors cursor-pointer" title="Penjelasan CRUD">?</button>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col items-center justify-center h-32 gap-3 hover:shadow-md transition-shadow">
-                          <TrendingUp className="h-8 w-8 text-emerald-400" />
-                          <div className="h-2 w-20 bg-slate-200 rounded-full"></div>
-                        </div>
-                        {/* Mock Large Chart */}
-                        <div className="col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm h-48 flex flex-col gap-4 hover:shadow-md transition-shadow">
-                          <div className="h-3 w-32 bg-slate-200 rounded-full"></div>
-                          <div className="flex-1 flex items-end justify-between gap-3 px-4">
-                            <div className="w-full bg-blue-100/80 rounded-t-lg h-[40%]"></div>
-                            <div className="w-full bg-blue-200/80 rounded-t-lg h-[70%]"></div>
-                            <div className="w-full bg-blue-300/80 rounded-t-lg h-[50%]"></div>
-                            <div className="w-full bg-blue-400/80 rounded-t-lg h-[90%]"></div>
-                            <div className="w-full bg-blue-500/80 rounded-t-lg h-[60%]"></div>
-                          </div>
+                        <div className="flex bg-white rounded-xl p-1.5 border border-slate-200 shadow-sm gap-2">
+                          {(["create", "read", "update", "delete"] as const).map((op) => (
+                            <button
+                              key={op}
+                              onClick={() => updateMenu(activeMenuIndex, { crud: { ...activeMenu.crud, [op]: !activeMenu.crud[op] } })}
+                              className={`px-3.5 py-2 rounded-lg text-xs font-semibold capitalize transition-all flex items-center gap-2 cursor-pointer ${
+                                activeMenu.crud[op]
+                                  ? "text-white shadow-md scale-[1.02]"
+                                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                              }`}
+                              style={{
+                                backgroundColor: activeMenu.crud[op] ? activeColor : undefined,
+                              }}
+                            >
+                              {op === "create" && <Plus className="h-3.5 w-3.5" />}
+                              {op === "read" && <Eye className="h-3.5 w-3.5" />}
+                              {op === "update" && <RefreshCw className="h-3.5 w-3.5" />}
+                              {op === "delete" && <Trash2 className="h-3.5 w-3.5" />}
+                              {op}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     </div>
-                  )}
-                </div>
-              </div>
 
+                    {activeSheet ? (
+                      <div className="p-4 bg-slate-50/50">
+                        <div className="flex overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-sm pb-1 custom-scrollbar">
+                          {/* Auto Columns Preview */}
+                          {activeSheet.autoCreatedAt && (
+                            <div className="shrink-0 w-44 border-r border-slate-200 bg-slate-50/70 select-none">
+                              <div className="p-3 border-b border-slate-200 font-semibold text-sm flex items-center gap-1.5 text-slate-500 bg-slate-100/50">
+                                <Lock className="h-3.5 w-3.5 text-slate-400"/> createdAt
+                              </div>
+                              <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                                <span>Tipe:</span> <span>Tanggal</span>
+                              </div>
+                              <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                                <span>Wajib:</span> <Check className="h-3 w-3" />
+                              </div>
+                              <div className="p-3 text-xs text-slate-300 italic border-b border-slate-50 bg-white">
+                                Data otomatis...
+                              </div>
+                              <div className="p-3 text-xs text-slate-300 italic bg-white">
+                                Data otomatis...
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Editable Columns */}
+                          {activeSheet.columns.map((col, cIdx) => (
+                            <div key={cIdx} className="shrink-0 w-56 border-r border-slate-200 relative group flex flex-col transition-colors hover:border-slate-300 focus-within:border-brand-300">
+                              {/* Header: Nama Kolom */}
+                              <div className="p-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between group-hover:bg-slate-100 transition-colors">
+                                <input
+                                  type="text"
+                                  value={col.name}
+                                  onChange={(e) => updateColumn(activeSheetIndex, cIdx, { name: e.target.value })}
+                                  className="w-full bg-transparent font-semibold text-sm border-none focus:ring-0 p-1 placeholder-slate-400"
+                                  placeholder="Nama Kolom"
+                                />
+                                <button 
+                                  onClick={() => removeColumn(activeSheetIndex, cIdx)} 
+                                  disabled={activeSheet.columns.length <= 1}
+                                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors disabled:opacity-0 cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5"/>
+                                </button>
+                              </div>
+                              
+                              {/* Tipe Data */}
+                              <div className="px-2 py-1.5 border-b border-slate-100 flex items-center justify-between">
+                                <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold px-1">Tipe</label>
+                                <select
+                                  value={col.type}
+                                  onChange={(e) => updateColumn(activeSheetIndex, cIdx, { type: e.target.value })}
+                                  className="text-xs font-medium bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 text-slate-700 cursor-pointer text-right hover:bg-slate-50 rounded"
+                                >
+                                  {dataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                              </div>
+                              
+                              {/* Wajib Diisi */}
+                              <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                                   onClick={() => updateColumn(activeSheetIndex, cIdx, { required: !col.required })}>
+                                <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold cursor-pointer">Wajib Isi</label>
+                                <div className={`h-4 w-4 rounded flex items-center justify-center transition-colors border ${
+                                  col.required ? "bg-slate-800 border-slate-800 text-white" : "border-slate-300 text-transparent"
+                                }`}>
+                                  <Check className="h-3 w-3" />
+                                </div>
+                              </div>
+                              
+                              {/* Mock Data Rows */}
+                              <div className="p-3 text-xs text-slate-300 italic border-b border-slate-50 bg-white flex-1 flex items-center">
+                                Contoh isi data...
+                              </div>
+                              <div className="p-3 text-xs text-slate-300 italic bg-white flex-1 flex items-center">
+                                Contoh isi data...
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Add Column Button */}
+                          <div 
+                            className="shrink-0 w-32 bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer group" 
+                            onClick={() => addColumn(activeSheetIndex)}
+                          >
+                            <div className="text-center flex flex-col items-center gap-2 transition-transform group-hover:scale-105" style={{ color: activeColor }}>
+                              <div className="h-10 w-10 rounded-full bg-white shadow-sm border border-slate-200 flex items-center justify-center text-inherit">
+                                <Plus className="h-5 w-5" />
+                              </div>
+                              <span className="text-xs font-semibold text-slate-500 group-hover:text-slate-700">Tambah Kolom</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-slate-50/50 flex-1 flex flex-col justify-center">
+                        <div className="max-w-md mx-auto w-full text-center mb-8">
+                          <h3 className="text-lg font-bold text-slate-700 font-display mb-2">Tampilan Dashboard / Statis</h3>
+                          <p className="text-sm text-slate-500 leading-relaxed">
+                            Karena menu ini tidak memiliki izin operasi <b>Create/Update/Delete</b>, tampilan akhirnya akan dirancang sebagai halaman informasi (Dashboard) yang bisa berisi bagan, grafik, atau rangkuman data.
+                          </p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto w-full opacity-60 hover:opacity-100 transition-opacity duration-300">
+                          {/* Mock Chart Box */}
+                          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col items-center justify-center h-32 gap-3 hover:shadow-md transition-shadow">
+                            <BarChart3 className="h-8 w-8 text-indigo-400" />
+                            <div className="h-2 w-16 bg-slate-200 rounded-full"></div>
+                          </div>
+                          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col items-center justify-center h-32 gap-3 hover:shadow-md transition-shadow">
+                            <TrendingUp className="h-8 w-8 text-emerald-400" />
+                            <div className="h-2 w-20 bg-slate-200 rounded-full"></div>
+                          </div>
+                          {/* Mock Large Chart */}
+                          <div className="col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm h-48 flex flex-col gap-4 hover:shadow-md transition-shadow">
+                            <div className="h-3 w-32 bg-slate-200 rounded-full"></div>
+                            <div className="flex-1 flex items-end justify-between gap-3 px-4">
+                              <div className="w-full bg-blue-100/80 rounded-t-lg h-[40%]"></div>
+                              <div className="w-full bg-blue-200/80 rounded-t-lg h-[70%]"></div>
+                              <div className="w-full bg-blue-300/80 rounded-t-lg h-[50%]"></div>
+                              <div className="w-full bg-blue-400/80 rounded-t-lg h-[90%]"></div>
+                              <div className="w-full bg-blue-500/80 rounded-t-lg h-[60%]"></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
