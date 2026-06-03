@@ -238,7 +238,7 @@ export default function ResultPage() {
       const initialMessagesGs = [
         {
           role: "user" as const,
-          content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}`,
+          content: `Buatkan kode backend (code.gs) saja berdasarkan plan berikut:\n\n${prompt.outputMd}\n\nPENTING: Anda WAJIB mengembalikan respons dengan format tag berikut:\n[EXPLANATION]Penjelasan singkat[/EXPLANATION]\n[CODE_GS]Isi kode backend[/CODE_GS]`,
         },
       ];
 
@@ -343,7 +343,11 @@ export default function ResultPage() {
       const finalParsed = parseTaggedContent(accumulatedText);
       const generatedGs = finalParsed.codeGs;
       if (!generatedGs) {
-        throw new Error("Model AI tidak mengembalikan blok kode backend ([CODE_GS]) yang valid. Silakan coba generate ulang.");
+        // Remove think block for preview
+        const withoutThink = accumulatedText.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+        const preview = withoutThink.substring(0, 150) + (withoutThink.length > 150 ? "..." : "");
+        console.error("RAW AI OUTPUT:", accumulatedText);
+        throw new Error("Model AI tidak mengembalikan blok kode backend ([CODE_GS]) yang valid. Silakan coba generate ulang.\n\nOutput AI: " + preview);
       }
       setEditedGs(generatedGs);
 
@@ -522,7 +526,11 @@ export default function ResultPage() {
       const finalParsedHtml = parseTaggedContent(accumulatedTextHtml);
       const generatedHtml = finalParsedHtml.codeHtml;
       if (!generatedHtml) {
-        throw new Error("Model AI tidak mengembalikan blok kode frontend ([CODE_HTML]) yang valid. Silakan coba generate ulang.");
+        // Remove think block for preview
+        const withoutThink = accumulatedTextHtml.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+        const preview = withoutThink.substring(0, 150) + (withoutThink.length > 150 ? "..." : "");
+        console.error("RAW AI OUTPUT (HTML):", accumulatedTextHtml);
+        throw new Error("Model AI tidak mengembalikan blok kode frontend ([CODE_HTML]) yang valid. Silakan coba generate ulang.\n\nOutput AI: " + preview);
       }
       setEditedHtml(generatedHtml);
       setIsSaved(true);
