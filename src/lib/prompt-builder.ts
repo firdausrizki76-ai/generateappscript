@@ -491,7 +491,7 @@ export function compileFullHTMLStructure(data: WizardData): string {
     /* Sidebar Navigation */
     .sidebar {
       width: 260px;
-      min-height: 100vh;
+      min-height: calc(100vh - 56px);
       background: #ffffff;
       border-right: 1px solid rgba(0, 0, 0, 0.05);
       box-shadow: 2px 0 10px rgba(0, 0, 0, 0.02);
@@ -604,17 +604,29 @@ export function compileFullHTMLStructure(data: WizardData): string {
   </div>
   ` : ''}
 
+  <!-- TOP NAVBAR -->
+  <nav class="navbar navbar-expand-lg py-2.5 px-4 shadow-sm text-white" style="background-color: var(--theme-color); z-index: 1010;">
+    <div class="container-fluid d-flex justify-content-between align-items-center p-0">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-cpu-fill fs-4 text-white"></i>
+        <span class="fs-5 fw-bold font-heading text-white truncate" style="max-width: 250px;">${data.appName}</span>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        <i class="bi bi-bell fs-5 text-white opacity-75"></i>
+        <div class="rounded-circle bg-white bg-opacity-20 border border-white border-opacity-30 d-flex align-items-center justify-content-center text-white" style="width: 36px; height: 36px;">
+          <i class="bi bi-person fs-5"></i>
+        </div>
+      </div>
+    </div>
+  </nav>
+
   <!-- MAIN APP SHELL -->
-  <div class="d-flex" id="appShell">
+  <div class="d-flex" id="appShell" style="min-height: calc(100vh - 56px);">
     
     <!-- SIDEBAR -->
     <div class="sidebar d-flex flex-column shrink-0">
-      <div class="p-4 bg-theme-gradient text-white d-flex align-items-center gap-2 mb-3">
-        <i class="bi bi-cpu-fill fs-4"></i>
-        <span class="fs-5 fw-bold font-heading truncate">${data.appName}</span>
-      </div>
       
-      <div class="flex-grow-1 px-3 overflow-y-auto">
+      <div class="flex-grow-1 px-3 py-4 overflow-y-auto">
         ${data.menus.map((menu, idx) => {
           const menuId = `menu_${menu.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
           // Map lucide icons to bootstrap icon names
@@ -659,12 +671,7 @@ export function compileFullHTMLStructure(data: WizardData): string {
       <!-- HEADER BAR -->
       <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
         <h4 class="mb-0 font-heading fw-bold" id="currentPageTitle">${data.menus[0]?.name || 'Beranda'}</h4>
-        <div class="d-flex align-items-center gap-3">
-          <span class="text-secondary small d-none d-sm-inline" id="userWelcome">Selamat datang</span>
-          <div class="bg-light border rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-            <i class="bi bi-person fs-5"></i>
-          </div>
-        </div>
+        <div class="text-secondary small font-medium" id="userWelcome">Selamat datang</div>
       </div>
 
       <!-- PAGES -->
