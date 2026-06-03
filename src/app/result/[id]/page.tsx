@@ -71,7 +71,12 @@ const parseTaggedContent = (text: string) => {
     // Check if the current text is just a prefix of "[EXPLANATION]"
     const prefixOfTag = "[EXPLANATION]".startsWith(text);
     if (!prefixOfTag && !hasGs && !hasHtml) {
-      explanation = cleanLeading(text);
+      const codeStartIdx = text.indexOf("```");
+      if (codeStartIdx !== -1) {
+        explanation = cleanLeading(text.substring(0, codeStartIdx));
+      } else {
+        explanation = cleanLeading(text);
+      }
     }
   }
 
@@ -80,6 +85,16 @@ const parseTaggedContent = (text: string) => {
   }
   if (hasHtml) {
     codeHtml = cleanCodeFences(cleanLeading(extractTag("[CODE_HTML]", "[/CODE_HTML]")));
+  }
+
+  // Fallback: If no tags were generated but there is a markdown code block, extract it
+  if (!hasGs && !hasHtml) {
+    const codeStartIdx = text.indexOf("```");
+    if (codeStartIdx !== -1) {
+      const codePart = text.substring(codeStartIdx);
+      codeGs = cleanCodeFences(codePart);
+      codeHtml = cleanCodeFences(codePart);
+    }
   }
 
   return { explanation, codeGs, codeHtml };
@@ -92,6 +107,9 @@ const getBubbleContent = (text: string, parsedContent: ReturnType<typeof parseTa
   }
   if ("[EXPLANATION]".startsWith(text)) {
     return "";
+  }
+  if (text.includes("```") && !text.includes("[CODE_GS]") && !text.includes("[CODE_HTML]")) {
+    return parsedContent.explanation;
   }
   return text;
 };
