@@ -1125,12 +1125,13 @@ export default function ResultPage() {
 
   /* Markdown renderer for plan.md view — with Mermaid diagram support */
   const renderMd = (md: string) => {
-    // First, extract and protect mermaid blocks
-    const mermaidBlocks: string[] = [];
-    let processed = md.replace(/```mermaid\n([\s\S]*?)```/gm, (_, content) => {
-      const idx = mermaidBlocks.length;
-      mermaidBlocks.push(content.trim());
-      return `%%MERMAID_BLOCK_${idx}%%`;
+    const codeBlocks: string[] = [];
+    
+    // First, extract and protect all code blocks (mermaid and regular)
+    let processed = md.replace(/```(\w*)\n([\s\S]*?)```/gm, (match) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(match);
+      return `%%CODE_BLOCK_${idx}%%`;
     });
 
     const html = processed
@@ -1150,18 +1151,29 @@ export default function ResultPage() {
         return `<tr>${cells.map((c) => `<${tag} class="${tdStyle}">${c.trim()}</${tag}>`).join("")}</tr>`;
       })
       .replace(/tr class="sep"\/tr/g, "")
-      .replace(/```(\w*)\n([\s\S]*?)```/gm, '<pre class="bg-surface-950 p-4 rounded-xl font-mono text-xs text-brand-300 border border-surface-800 overflow-x-auto my-3">$2</pre>')
-      .replace(/\n\n/g, "</p><p class='my-2'>")
+      .replace(/\n\n/g, '</div><div class="my-2">')
       .replace(/\n/g, "<br />");
 
-    // Restore mermaid blocks as renderable divs
-    let finalHtml = `<p>${html}</p>`;
-    mermaidBlocks.forEach((block, idx) => {
-      finalHtml = finalHtml.replace(
-        `%%MERMAID_BLOCK_${idx}%%`,
-        `<div class="mermaid-chart my-6 p-4 rounded-2xl border border-surface-800 bg-surface-900/50 overflow-x-auto"><pre class="mermaid">${block}</pre></div>`
-      );
+    let finalHtml = `<div class="text-surface-300">${html}</div>`;
+
+    // Restore blocks
+    codeBlocks.forEach((block, idx) => {
+      if (block.startsWith("```mermaid")) {
+        const content = block.replace(/```mermaid\n([\s\S]*?)```/, "$1").trim();
+        finalHtml = finalHtml.replace(
+          `%%CODE_BLOCK_${idx}%%`,
+          `<div class="mermaid-chart my-6 p-4 rounded-2xl border border-surface-800 bg-surface-900/50 overflow-x-auto"><pre class="mermaid">${content}</pre></div>`
+        );
+      } else {
+        const match = /```(\w*)\n([\s\S]*?)```/.exec(block);
+        const content = match ? match[2] : block;
+        finalHtml = finalHtml.replace(
+          `%%CODE_BLOCK_${idx}%%`,
+          `<div class="bg-surface-950 p-4 rounded-xl border border-surface-800 overflow-x-auto my-3"><pre class="font-mono text-xs text-brand-300">${content}</pre></div>`
+        );
+      }
     });
+
     return finalHtml;
   };
 
