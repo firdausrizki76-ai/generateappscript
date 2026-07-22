@@ -32,15 +32,6 @@ export default function RootLayout({
         <Navbar />
         <main className="flex-1">{children}</main>
         <Footer />
-        <Script
-          src={
-            process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION?.toLowerCase() === "true"
-              ? "https://app.midtrans.com/snap/snap.js"
-              : "https://app.sandbox.midtrans.com/snap/snap.js"
-          }
-          data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
-          strategy="lazyOnload"
-        />
       </body>
     </html>
   );

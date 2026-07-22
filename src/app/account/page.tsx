@@ -13,6 +13,7 @@ import {
   MessageSquare,
   LogOut,
 } from "lucide-react";
+import Script from "next/script";
 import { useRouter } from "next/navigation";
 import {
   getProfile,
@@ -232,6 +233,15 @@ export default function AccountPage() {
 
   return (
     <div className="relative min-h-[80vh] py-10">
+      <Script
+        src={
+          process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION?.toLowerCase() === "true"
+            ? "https://app.midtrans.com/snap/snap.js"
+            : "https://app.sandbox.midtrans.com/snap/snap.js"
+        }
+        data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
+        strategy="lazyOnload"
+      />
       <div className="absolute inset-0 bg-grid pointer-events-none" />
       <div className="absolute inset-0 bg-radial-top pointer-events-none" />
 
