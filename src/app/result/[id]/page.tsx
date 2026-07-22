@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -114,7 +114,7 @@ const getBubbleContent = (text: string, parsedContent: ReturnType<typeof parseTa
   return text;
 };
 
-export default function ResultPage() {
+function ResultPageContent() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -1712,5 +1712,19 @@ export default function ResultPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ResultPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="h-8 w-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <ResultPageContent />
+    </React.Suspense>
   );
 }
