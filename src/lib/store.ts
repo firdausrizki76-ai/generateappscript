@@ -23,6 +23,8 @@ export interface PromptHistory {
   createdAt: string;
   outputMd: string;
   inputData: WizardData;
+  interviewData?: InterviewData;
+  isAiGeneratedPrd?: boolean;
   codeGs?: string;
   codeHtml?: string;
   chatHistory?: { role: "user" | "assistant"; content: string; reasoning?: string }[];
@@ -89,6 +91,38 @@ export interface WizardData {
   hasEmailNotif: boolean;
   emailTrigger: string;
   extraFeatures: string[];
+}
+
+/* ─── Interview-Based PRD Types ─── */
+
+export interface RoleMenuDetail {
+  menuName: string;
+  description: string;
+  displayFields: string;
+  hasCrud: boolean;
+  crudDetails: string;
+  specialFeatures: string;
+}
+
+export interface UserRoleDefinition {
+  roleName: string;
+  roleDescription: string;
+  menus: RoleMenuDetail[];
+}
+
+export interface InterviewDesignPreferences {
+  themeColor: string;
+  fontFamily: string;
+  uiStyle: string;
+  mode: "light" | "dark" | "auto";
+}
+
+export interface InterviewData {
+  appName: string;
+  appDescription: string;
+  targetUserRoles: UserRoleDefinition[];
+  designPreferences: InterviewDesignPreferences;
+  additionalNotes: string;
 }
 
 const PLAN_LIMITS: Record<string, number> = { free: 1, pro: 10, business: 30 };
@@ -267,17 +301,23 @@ export async function getHistory(): Promise<PromptHistory[]> {
 
     if (error || !data) return [];
 
-    return data.map((item) => ({
-      id: item.id,
-      appName: item.app_name,
-      description: item.description || "",
-      createdAt: item.created_at,
-      outputMd: item.output_md || "",
-      inputData: item.input_data as WizardData,
-      codeGs: item.code_gs || "",
-      codeHtml: item.code_html || "",
-      chatHistory: item.chat_history || [],
-    }));
+    return data.map((item) => {
+      const rawInput = (item.input_data || {}) as any;
+      const { _interviewData, _isAiGeneratedPrd, ...wizardData } = rawInput;
+      return {
+        id: item.id,
+        appName: item.app_name,
+        description: item.description || "",
+        createdAt: item.created_at,
+        outputMd: item.output_md || "",
+        inputData: wizardData as WizardData,
+        interviewData: _interviewData as InterviewData | undefined,
+        isAiGeneratedPrd: !!_isAiGeneratedPrd,
+        codeGs: item.code_gs || "",
+        codeHtml: item.code_html || "",
+        chatHistory: item.chat_history || [],
+      };
+    });
   } catch (err) {
     console.error("Error getting history:", err);
     return [];
@@ -302,7 +342,11 @@ export async function addPromptToHistory(item: PromptHistory): Promise<void> {
         user_id: user.id,
         app_name: item.appName,
         description: item.description,
-        input_data: item.inputData,
+        input_data: {
+          ...item.inputData,
+          ...(item.interviewData ? { _interviewData: item.interviewData } : {}),
+          ...(item.isAiGeneratedPrd ? { _isAiGeneratedPrd: true } : {}),
+        },
         output_md: item.outputMd,
         code_gs: item.codeGs || "",
         code_html: item.codeHtml || "",
@@ -335,13 +379,17 @@ export async function getPromptById(id: string): Promise<PromptHistory | undefin
 
     if (error || !data) return undefined;
 
+    const rawInput = (data.input_data || {}) as any;
+    const { _interviewData, _isAiGeneratedPrd, ...wizardData } = rawInput;
     return {
       id: data.id,
       appName: data.app_name,
       description: data.description || "",
       createdAt: data.created_at,
       outputMd: data.output_md || "",
-      inputData: data.input_data as WizardData,
+      inputData: wizardData as WizardData,
+      interviewData: _interviewData as InterviewData | undefined,
+      isAiGeneratedPrd: !!_isAiGeneratedPrd,
       codeGs: data.code_gs || "",
       codeHtml: data.code_html || "",
       chatHistory: data.chat_history || [],

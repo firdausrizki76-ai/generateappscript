@@ -1027,9 +1027,17 @@ export default function ResultPage() {
 
   const isPro = profile?.plan === "pro" || profile?.plan === "business";
 
-  /* Markdown renderer for plan.md view */
+  /* Markdown renderer for plan.md view — with Mermaid diagram support */
   const renderMd = (md: string) => {
-    const html = md
+    // First, extract and protect mermaid blocks
+    const mermaidBlocks: string[] = [];
+    let processed = md.replace(/```mermaid\n([\s\S]*?)```/gm, (_, content) => {
+      const idx = mermaidBlocks.length;
+      mermaidBlocks.push(content.trim());
+      return `%%MERMAID_BLOCK_${idx}%%`;
+    });
+
+    const html = processed
       .replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-white mt-4 mb-2">$1</h3>')
       .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-brand-300 mt-6 mb-3 border-b border-surface-800 pb-1">$1</h2>')
       .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-black text-white mb-4">$1</h1>')
@@ -1049,8 +1057,60 @@ export default function ResultPage() {
       .replace(/```(\w*)\n([\s\S]*?)```/gm, '<pre class="bg-surface-950 p-4 rounded-xl font-mono text-xs text-brand-300 border border-surface-800 overflow-x-auto my-3">$2</pre>')
       .replace(/\n\n/g, "</p><p class='my-2'>")
       .replace(/\n/g, "<br />");
-    return `<p>${html}</p>`;
+
+    // Restore mermaid blocks as renderable divs
+    let finalHtml = `<p>${html}</p>`;
+    mermaidBlocks.forEach((block, idx) => {
+      finalHtml = finalHtml.replace(
+        `%%MERMAID_BLOCK_${idx}%%`,
+        `<div class="mermaid-chart my-6 p-4 rounded-2xl border border-surface-800 bg-surface-900/50 overflow-x-auto"><pre class="mermaid">${block}</pre></div>`
+      );
+    });
+    return finalHtml;
   };
+
+  // Initialize Mermaid.js for rendering flowcharts
+  useEffect(() => {
+    if (activeTab !== "plan" || !prompt?.outputMd) return;
+    // Check if outputMd contains mermaid blocks
+    if (!prompt.outputMd.includes("```mermaid")) return;
+
+    const initMermaid = async () => {
+      // Dynamically load mermaid if not loaded
+      if (!(window as any).mermaid) {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+        script.onload = () => {
+          (window as any).mermaid.initialize({
+            startOnLoad: false,
+            theme: "dark",
+            themeVariables: {
+              primaryColor: "#6366f1",
+              primaryBorderColor: "#818cf8",
+              primaryTextColor: "#e0e7ff",
+              lineColor: "#64748b",
+              secondaryColor: "#1e293b",
+              tertiaryColor: "#0f172a",
+              background: "#020617",
+              mainBkg: "#1e293b",
+              nodeBorder: "#6366f1",
+              clusterBkg: "#0f172a",
+              titleColor: "#e0e7ff",
+              edgeLabelBackground: "#1e293b",
+            },
+          });
+          (window as any).mermaid.run({ querySelector: ".mermaid" });
+        };
+        document.head.appendChild(script);
+      } else {
+        // Re-run mermaid rendering
+        setTimeout(() => {
+          (window as any).mermaid.run({ querySelector: ".mermaid" });
+        }, 200);
+      }
+    };
+    initMermaid();
+  }, [activeTab, prompt?.outputMd]);
 
   return (
     <div className="relative min-h-[85vh] py-6">
@@ -1100,7 +1160,7 @@ export default function ResultPage() {
                   }`}
                 >
                   <FileText className="h-3.5 w-3.5" />
-                  plan.md (Prompt)
+                  {prompt.isAiGeneratedPrd ? "📋 PRD (AI Generated)" : "plan.md (Prompt)"}
                 </button>
 
                 <button
@@ -1211,12 +1271,17 @@ export default function ResultPage() {
                     </button>
                     {guideOpen && (
                       <div className="px-4 pb-4 space-y-3 border-t border-surface-800/60 pt-3 animate-fade-up">
-                        {[
+                        {(prompt.isAiGeneratedPrd ? [
+                          { step: "1", desc: 'PRD ini dihasilkan oleh AI. Klik "Salin PRD" untuk menyalin seluruh dokumen.' },
+                          { step: "2", desc: isPro ? 'Gunakan tombol "Generate Code" di panel chat untuk langsung menghasilkan code.gs & index.html.' : 'Tempelkan PRD ke ChatGPT, Claude, atau Gemini dan minta mereka membuatkan kode berdasarkan PRD ini.' },
+                          { step: "3", desc: "Buka Google Sheets, ke Extensions > Apps Script, dan pasang kodenya." },
+                          { step: "4", desc: "Deploy sebagai Web App dan gunakan aplikasi Anda!" },
+                        ] : [
                           { step: "1", desc: 'Klik tombol "Salin Prompt" di kanan atas.' },
                           { step: "2", desc: "Buka chatbot AI seperti ChatGPT atau Claude." },
                           { step: "3", desc: 'Tempelkan prompt ini ke AI dan minta: "Tuliskan kode lengkap code.gs dan index.html berdasarkan plan ini secara lengkap."' },
                           { step: "4", desc: "Buka Google Sheets, ke Extensions > Apps Script, dan pasang kodenya." },
-                        ].map((s) => (
+                        ]).map((s) => (
                           <div key={s.step} className="flex gap-3 text-xs leading-relaxed">
                             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-brand-600 text-white font-bold text-[10px]">
                               {s.step}
