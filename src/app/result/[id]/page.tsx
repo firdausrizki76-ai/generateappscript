@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Copy,
@@ -154,6 +154,97 @@ export default function ResultPage() {
     }
   }, [chatMessages, chatLoading]);
 
+  const searchParams = useSearchParams();
+  const isLiveParam = searchParams?.get("live") === "true";
+  const [isPrdStreaming, setIsPrdStreaming] = useState(false);
+  const [livePrdMd, setLivePrdMd] = useState("");
+
+  const streamPrdGeneration = async (foundPrompt: PromptHistory) => {
+    if (!foundPrompt.interviewData) return;
+    setIsPrdStreaming(true);
+    setLivePrdMd("");
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Autentikasi diperlukan. Silakan login kembali.");
+
+      const res = await fetch("/api/generate-prd", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ interviewData: foundPrompt.interviewData }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        let errMsg = errText;
+        try {
+          const parsed = JSON.parse(errText);
+          if (parsed.error) errMsg = parsed.error;
+        } catch (e) {}
+        throw new Error(errMsg || "Gagal memproses streaming PRD.");
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("Response stream is not available.");
+
+      const decoder = new TextDecoder();
+      let done = false;
+      let buffer = "";
+      let accumulated = "";
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(trimmed.slice(6));
+                const delta = parsed.choices?.[0]?.delta?.content || "";
+                accumulated += delta;
+                setLivePrdMd(accumulated);
+              } catch (e) {}
+            }
+          }
+        }
+      }
+
+      let cleanPrd = accumulated.trim();
+      if (cleanPrd.startsWith("```markdown")) {
+        cleanPrd = cleanPrd.replace(/^```markdown\s*\n?/, "").replace(/\n?```\s*$/, "");
+      } else if (cleanPrd.startsWith("```md")) {
+        cleanPrd = cleanPrd.replace(/^```md\s*\n?/, "").replace(/\n?```\s*$/, "");
+      } else if (cleanPrd.startsWith("```") && !cleanPrd.startsWith("```mermaid")) {
+        cleanPrd = cleanPrd.replace(/^```\s*\n?/, "").replace(/\n?```\s*$/, "");
+      }
+
+      const finalMarkdown = cleanPrd || accumulated;
+      setPrompt((prev) => (prev ? { ...prev, outputMd: finalMarkdown } : null));
+
+      // Save output_md to Supabase DB
+      await supabase.from("prompts").update({ output_md: finalMarkdown }).eq("id", foundPrompt.id);
+
+      // Refresh profile quota
+      const updatedProf = await getProfile();
+      setProfile(updatedProf);
+    } catch (err: any) {
+      console.error("Error streaming PRD:", err);
+      alert(`Gagal meracik PRD: ${err.message || "Terjadi kesalahan koneksi."}`);
+    } finally {
+      setIsPrdStreaming(false);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     if (!isLoggedIn()) {
@@ -170,6 +261,11 @@ export default function ResultPage() {
           setChatMessages(found.chatHistory || []);
           if (found.codeGs) {
             setActiveTab("gs");
+          }
+
+          // Trigger live stream if redirected from generate page or outputMd is empty
+          if (isLiveParam || (found.isAiGeneratedPrd && !found.outputMd && found.interviewData)) {
+            streamPrdGeneration(found);
           }
         }
         const prof = await getProfile();
@@ -1071,9 +1167,9 @@ export default function ResultPage() {
 
   // Initialize Mermaid.js for rendering flowcharts
   useEffect(() => {
-    if (activeTab !== "plan" || !prompt?.outputMd) return;
-    // Check if outputMd contains mermaid blocks
-    if (!prompt.outputMd.includes("```mermaid")) return;
+    const currentMd = isPrdStreaming ? livePrdMd : prompt?.outputMd;
+    if (activeTab !== "plan" || !currentMd) return;
+    if (!currentMd.includes("```mermaid")) return;
 
     const initMermaid = async () => {
       // Dynamically load mermaid if not loaded
@@ -1110,7 +1206,7 @@ export default function ResultPage() {
       }
     };
     initMermaid();
-  }, [activeTab, prompt?.outputMd]);
+  }, [activeTab, prompt?.outputMd, livePrdMd, isPrdStreaming]);
 
   return (
     <div className="relative min-h-[85vh] py-6">
@@ -1293,10 +1389,27 @@ export default function ResultPage() {
                     )}
                   </div>
 
+                  {/* Live Streaming Indicator Banner */}
+                  {isPrdStreaming && (
+                    <div className="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center justify-between animate-pulse">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full bg-brand-400 animate-ping" />
+                        <span className="text-xs font-bold text-brand-300">
+                          ✨ AI (DeepSeek v4 Pro) sedang mengetik PRD secara live...
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono text-surface-400 bg-surface-900/60 px-2.5 py-1 rounded-lg border border-surface-800">
+                        {livePrdMd.length} karakter
+                      </span>
+                    </div>
+                  )}
+
                   {/* Rendered Prompt Output */}
                   <div
                     className="p-4 sm:p-6 md-output select-text selection:bg-brand-500/30"
-                    dangerouslySetInnerHTML={{ __html: renderMd(prompt.outputMd) }}
+                    dangerouslySetInnerHTML={{
+                      __html: renderMd(isPrdStreaming ? (livePrdMd || "⏳ **Menghubungkan ke AI PRD Engine...**") : prompt.outputMd),
+                    }}
                   />
                 </div>
               )}

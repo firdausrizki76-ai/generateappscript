@@ -48,48 +48,6 @@ export default function GeneratePage() {
       setGenerating(true);
       setErrorMsg("");
 
-      // Get auth token
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
-      }
-
-      // Call AI PRD Generation API
-      const res = await fetch("/api/generate-prd", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ interviewData }),
-      });
-
-      const responseText = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        if (res.status === 504 || res.status === 502) {
-          throw new Error("Server mengalami timeout saat memproses PRD (AI membutuhkan waktu lebih lama). Silakan coba klik tombol Generate sekali lagi.");
-        }
-        throw new Error(`Respon server tidak valid (${res.status}). Silakan coba beberapa saat lagi.`);
-      }
-
-      if (!data.success) {
-        if (res.status === 403) {
-          setShowQuotaModal(true);
-          setGenerating(false);
-          return;
-        }
-        throw new Error(data.error || "Gagal menghasilkan PRD.");
-      }
-
-      const prdMarkdown = data.prdMarkdown;
-
       // Build a minimal WizardData for backward compatibility
       const wizardData = {
         ...getDefaultWizardData(),
@@ -99,14 +57,14 @@ export default function GeneratePage() {
         loginAccess: interviewData.targetUserRoles.map((r) => r.roleName).join(", "),
       };
 
-      // Save to history
+      // Create prompt history entry immediately
       const id = generateId();
       await addPromptToHistory({
         id,
         appName: interviewData.appName,
         description: interviewData.appDescription,
         createdAt: new Date().toISOString(),
-        outputMd: prdMarkdown,
+        outputMd: "", // Will be filled via live stream in result page
         inputData: wizardData,
         interviewData: interviewData,
         isAiGeneratedPrd: true,
@@ -115,10 +73,11 @@ export default function GeneratePage() {
         chatHistory: [],
       });
 
-      router.push(`/result/${id}`);
+      // Redirect immediately to result page with live streaming flag
+      router.push(`/result/${id}?live=true`);
     } catch (err: any) {
-      console.error("Error generating PRD:", err);
-      setErrorMsg(err.message || "Terjadi kesalahan saat menghasilkan PRD. Silakan coba lagi.");
+      console.error("Error starting PRD generation:", err);
+      setErrorMsg(err.message || "Terjadi kesalahan. Silakan coba lagi.");
       setGenerating(false);
     }
   };

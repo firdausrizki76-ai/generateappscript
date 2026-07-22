@@ -131,30 +131,6 @@ Langkah-langkah deploy aplikasi ke Google Apps Script.
 7. Jangan ada placeholder "TBD" atau "TODO" — semua harus terisi lengkap berdasarkan data interview.`;
 }
 
-async function fetchOpenRouterWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 2
-): Promise<Response> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const res = await fetch(url, options);
-      if (res.status === 429 && attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
-        continue;
-      }
-      return res;
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      }
-    }
-  }
-  throw lastError || new Error("Failed after retries");
-}
-
 export async function POST(req: Request) {
   try {
     // 1. Auth
@@ -237,15 +213,31 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Call AI
+    // 4. Call AI with STREAMING
     const apiKey = process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
-      // Demo/mock mode
+      // Demo/mock mode streaming
       const mockPrd = generateMockPrd(interviewData);
-      return NextResponse.json({
-        success: true,
-        prdMarkdown: mockPrd,
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          const lines = mockPrd.split("\n");
+          for (const line of lines) {
+            const data = JSON.stringify({ choices: [{ delta: { content: line + "\n" } }] });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+            await new Promise((r) => setTimeout(r, 20));
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
       });
     }
 
@@ -262,42 +254,34 @@ export async function POST(req: Request) {
         },
       ],
       temperature: 0.4,
-      max_tokens: 6144,
+      max_tokens: 8192,
+      stream: true,
     };
 
-    const res = await fetchOpenRouterWithRetry("https://openrouter.ai/api/v1/chat/completions", {
+    const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
         "HTTP-Referer": "https://generateappscript.vercel.app/",
-        "X-Title": "AppScript Generator - PRD Engine",
+        "X-Title": "AppScript Generator - PRD Live Stream Engine",
       },
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("OpenRouter error:", errText);
-      throw new Error(`AI API Error (${res.status}): ${errText}`);
+    if (!openRouterRes.ok) {
+      const errText = await openRouterRes.text();
+      console.error("OpenRouter stream error:", errText);
+      return NextResponse.json({ success: false, error: errText }, { status: openRouterRes.status });
     }
 
-    const data = await res.json();
-    let prdMarkdown = data.choices?.[0]?.message?.content || "";
-
-    // Clean markdown code fences if AI wraps the entire response
-    prdMarkdown = prdMarkdown.trim();
-    if (prdMarkdown.startsWith("```markdown")) {
-      prdMarkdown = prdMarkdown.replace(/^```markdown\s*\n?/, "").replace(/\n?```\s*$/, "");
-    } else if (prdMarkdown.startsWith("```md")) {
-      prdMarkdown = prdMarkdown.replace(/^```md\s*\n?/, "").replace(/\n?```\s*$/, "");
-    } else if (prdMarkdown.startsWith("```") && !prdMarkdown.startsWith("```mermaid")) {
-      prdMarkdown = prdMarkdown.replace(/^```\s*\n?/, "").replace(/\n?```\s*$/, "");
-    }
-
-    return NextResponse.json({
-      success: true,
-      prdMarkdown: prdMarkdown.trim(),
+    // Pass the SSE stream directly back to the client!
+    return new Response(openRouterRes.body, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+      },
     });
   } catch (err: any) {
     console.error("PRD Generation Error:", err);
