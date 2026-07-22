@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Sparkles,
   ChevronRight,
@@ -94,6 +94,8 @@ function getDefaultDesign(): InterviewDesignPreferences {
   };
 }
 
+const DRAFT_KEY = "appscript_interview_draft";
+
 export default function InterviewWizard({ onComplete, generating }: InterviewWizardProps) {
   const [step, setStep] = useState(1);
   const [appName, setAppName] = useState("");
@@ -103,6 +105,67 @@ export default function InterviewWizard({ onComplete, generating }: InterviewWiz
   const [design, setDesign] = useState<InterviewDesignPreferences>(getDefaultDesign());
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [customColor, setCustomColor] = useState("");
+  const [isDraftRestored, setIsDraftRestored] = useState(false);
+
+  // Restore draft on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.appName) setAppName(parsed.appName);
+        if (parsed.appDescription) setAppDescription(parsed.appDescription);
+        if (parsed.roles && Array.isArray(parsed.roles) && parsed.roles.length > 0) {
+          setRoles(parsed.roles);
+        }
+        if (parsed.design) setDesign(parsed.design);
+        if (parsed.additionalNotes) setAdditionalNotes(parsed.additionalNotes);
+        if (parsed.customColor) setCustomColor(parsed.customColor);
+        if (parsed.step && typeof parsed.step === "number") setStep(parsed.step);
+        setIsDraftRestored(true);
+      }
+    } catch (err) {
+      console.error("Failed to restore draft:", err);
+    }
+  }, []);
+
+  // Save draft on state changes
+  useEffect(() => {
+    // Skip saving if form is blank
+    if (!appName && !appDescription && roles.length === 1 && !roles[0].roleName) {
+      return;
+    }
+    try {
+      const draftObj = {
+        step,
+        appName,
+        appDescription,
+        roles,
+        design,
+        additionalNotes,
+        customColor,
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftObj));
+    } catch (err) {
+      console.error("Failed to save draft:", err);
+    }
+  }, [step, appName, appDescription, roles, design, additionalNotes, customColor]);
+
+  const handleResetDraft = () => {
+    if (confirm("Apakah Anda yakin ingin menghapus draf isian ini dan mulai dari awal?")) {
+      localStorage.removeItem(DRAFT_KEY);
+      setAppName("");
+      setAppDescription("");
+      setRoles([getDefaultRole()]);
+      setActiveRoleIndex(0);
+      setDesign(getDefaultDesign());
+      setAdditionalNotes("");
+      setCustomColor("");
+      setStep(1);
+      setIsDraftRestored(false);
+    }
+  };
 
   // Validation
   const isStep1Valid = appName.trim().length > 0 && appDescription.trim().length > 10;
@@ -170,6 +233,7 @@ export default function InterviewWizard({ onComplete, generating }: InterviewWiz
   };
 
   const handleGenerate = () => {
+    localStorage.removeItem(DRAFT_KEY);
     const interviewData: InterviewData = {
       appName,
       appDescription,
@@ -231,6 +295,21 @@ export default function InterviewWizard({ onComplete, generating }: InterviewWiz
               );
             })}
           </div>
+
+          {isDraftRestored && (
+            <div className="mt-3 flex items-center justify-between px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 animate-fade-up">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Draf isian sebelumnya otomatis dimuat kembali. Anda dapat langsung melanjutkan.</span>
+              </div>
+              <button
+                onClick={handleResetDraft}
+                className="text-surface-400 hover:text-red-400 underline transition-colors cursor-pointer text-[11px]"
+              >
+                Mulai dari awal (Reset)
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
