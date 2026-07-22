@@ -1127,8 +1127,8 @@ export default function ResultPage() {
   const renderMd = (md: string) => {
     const codeBlocks: string[] = [];
     
-    // First, extract and protect all code blocks (mermaid and regular)
-    let processed = md.replace(/```(\w*)\n([\s\S]*?)```/gm, (match) => {
+    // First, extract and protect all code blocks (mermaid and regular), including unclosed ones during streaming
+    let processed = md.replace(/```(\w*)\n([\s\S]*?)(?:```|$)/gm, (match) => {
       const idx = codeBlocks.length;
       codeBlocks.push(match);
       return `%%CODE_BLOCK_${idx}%%`;
@@ -1159,13 +1159,13 @@ export default function ResultPage() {
     // Restore blocks
     codeBlocks.forEach((block, idx) => {
       if (block.startsWith("```mermaid")) {
-        const content = block.replace(/```mermaid\n([\s\S]*?)```/, "$1").trim();
+        const content = block.replace(/```mermaid\n([\s\S]*?)(?:```|$)/, "$1").trim();
         finalHtml = finalHtml.replace(
           `%%CODE_BLOCK_${idx}%%`,
           `<div class="mermaid-chart my-6 p-4 rounded-2xl border border-surface-800 bg-surface-900/50 overflow-x-auto"><pre class="mermaid">${content}</pre></div>`
         );
       } else {
-        const match = /```(\w*)\n([\s\S]*?)```/.exec(block);
+        const match = /```(\w*)\n([\s\S]*?)(?:```|$)/.exec(block);
         const content = match ? match[2] : block;
         finalHtml = finalHtml.replace(
           `%%CODE_BLOCK_${idx}%%`,
