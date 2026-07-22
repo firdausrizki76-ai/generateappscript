@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getUserQuotaCycle } from "@/lib/quota";
 
 export const runtime = 'edge';
+export const maxDuration = 60;
 
 // System Skill Prompt — injected as the AI's "expertise module"
 function buildSystemSkillPrompt(interviewData: any): string {
@@ -261,7 +262,7 @@ export async function POST(req: Request) {
         },
       ],
       temperature: 0.4,
-      max_tokens: 16384,
+      max_tokens: 6144,
     };
 
     const res = await fetchOpenRouterWithRetry("https://openrouter.ai/api/v1/chat/completions", {

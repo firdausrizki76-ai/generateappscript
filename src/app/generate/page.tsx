@@ -68,7 +68,16 @@ export default function GeneratePage() {
         body: JSON.stringify({ interviewData }),
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        if (res.status === 504 || res.status === 502) {
+          throw new Error("Server mengalami timeout saat memproses PRD (AI membutuhkan waktu lebih lama). Silakan coba klik tombol Generate sekali lagi.");
+        }
+        throw new Error(`Respon server tidak valid (${res.status}). Silakan coba beberapa saat lagi.`);
+      }
 
       if (!data.success) {
         if (res.status === 403) {
