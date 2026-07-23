@@ -1098,6 +1098,52 @@ function ResultPageContent() {
     }
   };
 
+  // Initialize Mermaid.js for rendering flowcharts
+  // NOTE: This useEffect MUST be placed before any conditional early returns
+  // to satisfy React's Rules of Hooks (hooks must be called unconditionally).
+  useEffect(() => {
+    if (!mounted || loading || !prompt) return;
+    const currentMd = isPrdStreaming ? livePrdMd : prompt?.outputMd;
+    if (activeTab !== "plan" || !currentMd) return;
+    if (!currentMd.includes("```mermaid")) return;
+
+    const initMermaid = async () => {
+      // Dynamically load mermaid if not loaded
+      if (!(window as any).mermaid) {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+        script.onload = () => {
+          (window as any).mermaid.initialize({
+            startOnLoad: false,
+            theme: "dark",
+            themeVariables: {
+              primaryColor: "#6366f1",
+              primaryBorderColor: "#818cf8",
+              primaryTextColor: "#e0e7ff",
+              lineColor: "#64748b",
+              secondaryColor: "#1e293b",
+              tertiaryColor: "#0f172a",
+              background: "#020617",
+              mainBkg: "#1e293b",
+              nodeBorder: "#6366f1",
+              clusterBkg: "#0f172a",
+              titleColor: "#e0e7ff",
+              edgeLabelBackground: "#1e293b",
+            },
+          });
+          (window as any).mermaid.run({ querySelector: ".mermaid" });
+        };
+        document.head.appendChild(script);
+      } else {
+        // Re-run mermaid rendering
+        setTimeout(() => {
+          (window as any).mermaid.run({ querySelector: ".mermaid" });
+        }, 200);
+      }
+    };
+    initMermaid();
+  }, [mounted, loading, prompt, activeTab, livePrdMd, isPrdStreaming]);
+
   if (!mounted || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -1177,48 +1223,7 @@ function ResultPageContent() {
     return finalHtml;
   };
 
-  // Initialize Mermaid.js for rendering flowcharts
-  useEffect(() => {
-    const currentMd = isPrdStreaming ? livePrdMd : prompt?.outputMd;
-    if (activeTab !== "plan" || !currentMd) return;
-    if (!currentMd.includes("```mermaid")) return;
 
-    const initMermaid = async () => {
-      // Dynamically load mermaid if not loaded
-      if (!(window as any).mermaid) {
-        const script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
-        script.onload = () => {
-          (window as any).mermaid.initialize({
-            startOnLoad: false,
-            theme: "dark",
-            themeVariables: {
-              primaryColor: "#6366f1",
-              primaryBorderColor: "#818cf8",
-              primaryTextColor: "#e0e7ff",
-              lineColor: "#64748b",
-              secondaryColor: "#1e293b",
-              tertiaryColor: "#0f172a",
-              background: "#020617",
-              mainBkg: "#1e293b",
-              nodeBorder: "#6366f1",
-              clusterBkg: "#0f172a",
-              titleColor: "#e0e7ff",
-              edgeLabelBackground: "#1e293b",
-            },
-          });
-          (window as any).mermaid.run({ querySelector: ".mermaid" });
-        };
-        document.head.appendChild(script);
-      } else {
-        // Re-run mermaid rendering
-        setTimeout(() => {
-          (window as any).mermaid.run({ querySelector: ".mermaid" });
-        }, 200);
-      }
-    };
-    initMermaid();
-  }, [activeTab, prompt?.outputMd, livePrdMd, isPrdStreaming]);
 
   return (
     <div className="relative min-h-[85vh] py-6">
