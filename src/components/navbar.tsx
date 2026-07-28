@@ -12,10 +12,10 @@ import {
   LogOut,
   ChevronDown,
   ArrowRight,
-  HelpCircle,
 } from "lucide-react";
 import { AppsScriptLogo } from "./logo";
 import { isLoggedIn, logout, getProfile, type UserProfile } from "@/lib/store";
+import { ReportBugButton } from "./report-bug";
 
 const publicLinks = [
   { href: "/", label: "Beranda" },
@@ -33,13 +33,16 @@ export function Navbar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMounted(true);
-    setLoggedIn(isLoggedIn());
+    const timer = setTimeout(() => {
+      setMounted(true);
+      setLoggedIn(isLoggedIn());
+    }, 0);
     const fetchProfile = async () => {
       const prof = await getProfile();
       setProfile(prof);
     };
     fetchProfile();
+    return () => clearTimeout(timer);
   }, [pathname]);
 
   // Close dropdown on click outside
@@ -127,6 +130,7 @@ export function Navbar() {
                   <User className="h-4 w-4" />
                   Akun
                 </Link>
+                <ReportBugButton />
                 <Link href="/generate" className="btn-primary ml-3 flex items-center gap-2 text-sm !py-2 !px-4">
                   <Sparkles className="h-4 w-4" />
                   Buat Prompt
@@ -197,6 +201,7 @@ export function Navbar() {
                     {link.label}
                   </Link>
                 ))}
+                <ReportBugButton />
                 <Link href="/login" className="btn-primary ml-3 flex items-center gap-2 text-sm !py-2 !px-4 shadow-md shadow-brand-500/10">
                   <span>Masuk</span>
                   <ArrowRight className="h-4 w-4" />
@@ -206,13 +211,16 @@ export function Navbar() {
           </nav>
 
           {/* Mobile toggle */}
-          <button
-            className="md:hidden p-2 rounded-lg text-surface-300 hover:bg-surface-700/50 transition"
-            onClick={() => setOpen(!open)}
-            aria-label="Toggle menu"
-          >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          <div className="flex md:hidden items-center gap-1.5">
+            <ReportBugButton />
+            <button
+              className="p-2 rounded-lg text-surface-300 hover:bg-surface-700/50 transition"
+              onClick={() => setOpen(!open)}
+              aria-label="Toggle menu"
+            >
+              {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
       </div>
 
