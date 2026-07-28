@@ -13,6 +13,7 @@ import {
   Loader2,
   Mail,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { isLoggedIn, getProfile, type UserProfile } from "@/lib/store";
 
 interface ReportBugModalProps {
@@ -31,8 +32,13 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Auto populate nama & email jika user login
   useEffect(() => {
@@ -59,7 +65,7 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
     };
   }, [photoPreview]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
   const handleFileChange = (file: File | undefined) => {
     if (!file) return;
@@ -185,13 +191,13 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-24 sm:pt-28 pb-12 overflow-y-auto bg-surface-950/80 backdrop-blur-md animate-fade-up"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-surface-950/80 backdrop-blur-md animate-fade-up overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-surface-900 border border-amber-500/30 shadow-2xl shadow-amber-500/10 flex flex-col max-h-[calc(100vh-8rem)]"
+        className="relative w-full max-w-lg my-auto overflow-hidden rounded-2xl bg-surface-900 border border-amber-500/30 shadow-2xl shadow-amber-500/10 flex flex-col max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glowing top border gradient */}
@@ -452,7 +458,8 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
           </a>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
