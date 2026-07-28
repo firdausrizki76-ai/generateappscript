@@ -186,16 +186,19 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-surface-950/80 backdrop-blur-md animate-fade-up">
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-24 sm:pt-28 pb-12 overflow-y-auto bg-surface-950/80 backdrop-blur-md animate-fade-up"
+      onClick={onClose}
+    >
       <div
-        className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-surface-900 border border-amber-500/30 shadow-2xl shadow-amber-500/10 flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-surface-900 border border-amber-500/30 shadow-2xl shadow-amber-500/10 flex flex-col max-h-[calc(100vh-8rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glowing top border gradient */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-red-500 to-amber-400" />
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-800 bg-surface-900/60">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-surface-800 bg-surface-900/60">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-inner">
               <Bug className="h-5 w-5 animate-pulse" />
@@ -222,7 +225,7 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
         </div>
 
         {/* Modal Content */}
-        <div className="p-6 overflow-y-auto space-y-4">
+        <div className="p-5 overflow-y-auto space-y-3.5">
           {isSuccess ? (
             <div className="py-8 text-center space-y-4 animate-fade-up">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-lg shadow-emerald-500/10">
@@ -309,11 +312,11 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
                 </label>
                 <textarea
                   required
-                  rows={3}
+                  rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Jelaskan secara detail bagaimana bug terjadi dan langkah sebelumnya..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-950 border border-surface-800 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-amber-500 transition resize-none"
+                  className="w-full px-3.5 py-2 rounded-xl bg-surface-950 border border-surface-800 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-amber-500 transition resize-none"
                 />
               </div>
 
@@ -332,7 +335,7 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`group relative flex flex-col items-center justify-center p-5 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+                    className={`group relative flex flex-col items-center justify-center p-3.5 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
                       isDragging
                         ? "border-amber-500 bg-amber-500/10"
                         : "border-surface-700 hover:border-amber-500/50 bg-surface-950/60 hover:bg-surface-900/60"
@@ -345,7 +348,7 @@ export function ReportBugModal({ isOpen, onClose }: ReportBugModalProps) {
                       onChange={(e) => handleFileChange(e.target.files?.[0])}
                       className="hidden"
                     />
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-850 border border-surface-750 text-surface-400 group-hover:text-amber-400 group-hover:border-amber-500/30 transition mb-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-850 border border-surface-750 text-surface-400 group-hover:text-amber-400 group-hover:border-amber-500/30 transition mb-1.5">
                       <Camera className="h-5 w-5" />
                     </div>
                     <p className="text-xs font-semibold text-surface-200 group-hover:text-amber-300 transition text-center">
