@@ -159,10 +159,13 @@ function ResultPageContent() {
   const [isPrdStreaming, setIsPrdStreaming] = useState(false);
   const [livePrdMd, setLivePrdMd] = useState("");
 
-  const streamPrdGeneration = async (foundPrompt: PromptHistory) => {
+  const streamPrdGeneration = async (foundPrompt: PromptHistory, existingPrd = "", loopCount = 0) => {
     if (!foundPrompt.interviewData) return;
-    setIsPrdStreaming(true);
-    setLivePrdMd("");
+    
+    if (loopCount === 0) {
+      setIsPrdStreaming(true);
+      setLivePrdMd("");
+    }
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -175,7 +178,10 @@ function ResultPageContent() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ interviewData: foundPrompt.interviewData }),
+        body: JSON.stringify({ 
+          interviewData: foundPrompt.interviewData,
+          existingPrd: existingPrd 
+        }),
       });
 
       if (!res.ok) {
@@ -194,7 +200,8 @@ function ResultPageContent() {
       const decoder = new TextDecoder();
       let done = false;
       let buffer = "";
-      let accumulated = "";
+      let accumulated = existingPrd;
+      let finishReason = null;
 
       while (!done) {
         const { value, done: doneReading } = await reader.read();
@@ -211,6 +218,9 @@ function ResultPageContent() {
               try {
                 const parsed = JSON.parse(trimmed.slice(6));
                 const delta = parsed.choices?.[0]?.delta?.content || "";
+                if (parsed.choices?.[0]?.finish_reason) {
+                  finishReason = parsed.choices?.[0]?.finish_reason;
+                }
                 accumulated += delta;
                 setLivePrdMd(accumulated);
               } catch (e) {}
@@ -229,6 +239,16 @@ function ResultPageContent() {
       }
 
       const finalMarkdown = cleanPrd || accumulated;
+      
+      // Deteksi apakah terpotong (truncated)
+      const isLikelyTruncated = finishReason === "length" || (!finalMarkdown.includes("Deployment Guide") && !finalMarkdown.includes("10. Deployment"));
+      
+      if (isLikelyTruncated && loopCount < 3) {
+        console.log(`PRD terpotong. Melakukan auto-continue (Loop ${loopCount + 1})...`);
+        await streamPrdGeneration(foundPrompt, accumulated, loopCount + 1);
+        return;
+      }
+
       setPrompt((prev) => (prev ? { ...prev, outputMd: finalMarkdown } : null));
 
       // Save output_md to Supabase DB
@@ -241,7 +261,9 @@ function ResultPageContent() {
       console.error("Error streaming PRD:", err);
       alert(`Gagal meracik PRD: ${err.message || "Terjadi kesalahan koneksi."}`);
     } finally {
-      setIsPrdStreaming(false);
+      if (loopCount === 0) {
+        setIsPrdStreaming(false);
+      }
     }
   };
 

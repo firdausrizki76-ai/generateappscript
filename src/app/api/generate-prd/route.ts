@@ -162,7 +162,7 @@ export async function POST(req: Request) {
 
     // 2. Parse body
     const body = await req.json();
-    const { interviewData } = body;
+    const { interviewData, existingPrd } = body;
 
     if (!interviewData || !interviewData.appName) {
       return NextResponse.json(
@@ -203,7 +203,7 @@ export async function POST(req: Request) {
       quota = newQuota;
     }
 
-    if (quota.used >= quota.limit) {
+    if (quota.used > quota.limit) {
       return NextResponse.json(
         {
           success: false,
@@ -244,15 +244,33 @@ export async function POST(req: Request) {
     const systemPrompt = buildSystemSkillPrompt(interviewData);
     const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-pro";
 
+    const messages = [
+      { role: "system", content: systemPrompt }
+    ];
+
+    if (existingPrd && existingPrd.trim().length > 0) {
+      messages.push({
+        role: "user",
+        content: `Buatkan PRD/Master Implementation Plan yang super lengkap untuk aplikasi "${interviewData.appName}". Gunakan semua data interview di atas. Pastikan semua bagian terisi tanpa ada yang kosong atau placeholder.`
+      });
+      messages.push({
+        role: "assistant",
+        content: existingPrd
+      });
+      messages.push({
+        role: "user",
+        content: "Lanjutkan pembuatan dokumen PRD di atas TEPAT dari titik terakhir teks yang terpotong. JANGAN mengulang dari awal, dan JANGAN memberikan kata pengantar. Langsung sambung saja teksnya."
+      });
+    } else {
+      messages.push({
+        role: "user",
+        content: `Buatkan PRD/Master Implementation Plan yang super lengkap untuk aplikasi "${interviewData.appName}". Gunakan semua data interview di atas. Pastikan semua bagian terisi tanpa ada yang kosong atau placeholder.`
+      });
+    }
+
     const payload = {
       model: modelName,
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Buatkan PRD/Master Implementation Plan yang super lengkap untuk aplikasi "${interviewData.appName}". Gunakan semua data interview di atas. Pastikan semua bagian terisi tanpa ada yang kosong atau placeholder.`,
-        },
-      ],
+      messages: messages,
       temperature: 0.4,
       max_tokens: 8192,
       stream: true,
